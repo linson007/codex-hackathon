@@ -27,6 +27,7 @@ export default tseslint.config(
         Buffer: "readonly",
         document: "readonly",
         localStorage: "readonly",
+        navigator: "readonly",
         fetch: "readonly"
       }
     },

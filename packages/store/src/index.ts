@@ -114,6 +114,34 @@ export type KnowledgeBaseInfo = {
   edgeCount: number;
 };
 
+export type EnterpriseExport = {
+  schemaVersion: number;
+  exportedAt: string;
+  knowledgeBase: KnowledgeBaseInfo;
+  repositories: RepositoryOverview[];
+  catalog: {
+    services: ExportNode[];
+    controllers: ExportNode[];
+    clients: ExportNode[];
+    endpoints: ExportNode[];
+    tables: ExportNode[];
+    topics: ExportNode[];
+  };
+  relationships: Array<GraphEdge & { from?: ExportNode; to?: ExportNode }>;
+  docs: {
+    repositories: Array<Pick<RepositoryDoc, "repoName" | "summary" | "generatedAt" | "mode" | "model">>;
+    items: Array<Pick<GraphItemDoc, "nodeId" | "repoName" | "nodeKind" | "nodeName" | "summary" | "generatedAt" | "mode" | "model">>;
+  };
+  integrationHints: {
+    backstage: string[];
+    jira: string[];
+    git: string[];
+    observability: string[];
+  };
+};
+
+export type ExportNode = Pick<GraphNode, "id" | "kind" | "name" | "repo" | "filePath" | "metadata">;
+
 export function contextOSHome(): string {
   return resolve(process.env.CONTEXTOS_HOME ?? join(homedir(), ".contextos"));
 }
@@ -497,6 +525,84 @@ export class ContextStore {
     };
   }
 
+  enterpriseExport(): EnterpriseExport {
+    const repositories = this.getRepositoryOverviews();
+    const nodes = this.getNodes();
+    const edges = this.getEdges();
+    const nodeById = new Map(nodes.map((node) => [node.id, exportNode(node)]));
+    const info = {
+      name: this.name,
+      root: this.root,
+      createdOn: repositories.map((repo) => repo.addedAt).sort()[0] ?? createdFromDbFile(this.name),
+      lastUpdatedOn: repositories
+        .map((repo) => repo.lastIndexedAt)
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1),
+      repositoryCount: repositories.length,
+      nodeCount: nodes.length,
+      edgeCount: edges.length
+    };
+    const serviceNodes = nodes.filter((node) => node.kind === "Service");
+    return {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      knowledgeBase: info,
+      repositories,
+      catalog: {
+        services: serviceNodes
+          .filter((node) => node.metadata?.stereotype === "Service" || (!node.metadata?.stereotype && !node.metadata?.external))
+          .map(exportNode),
+        controllers: serviceNodes.filter((node) => node.metadata?.stereotype === "RestController").map(exportNode),
+        clients: serviceNodes.filter((node) => node.metadata?.stereotype === "FeignClient" || node.metadata?.external).map(exportNode),
+        endpoints: nodes.filter((node) => node.kind === "Endpoint").map(exportNode),
+        tables: nodes.filter((node) => node.kind === "Table").map(exportNode),
+        topics: nodes.filter((node) => node.kind === "Topic").map(exportNode)
+      },
+      relationships: edges.map((edge) => ({
+        ...edge,
+        from: nodeById.get(edge.fromId),
+        to: nodeById.get(edge.toId)
+      })),
+      docs: {
+        repositories: this.getRepositoryDocs().map((doc) => ({
+          repoName: doc.repoName,
+          summary: doc.summary,
+          generatedAt: doc.generatedAt,
+          mode: doc.mode,
+          model: doc.model
+        })),
+        items: repositories.flatMap((repo) =>
+          this.getGraphItemDocs(repo.name).map((doc) => ({
+            nodeId: doc.nodeId,
+            repoName: doc.repoName,
+            nodeKind: doc.nodeKind,
+            nodeName: doc.nodeName,
+            summary: doc.summary,
+            generatedAt: doc.generatedAt,
+            mode: doc.mode,
+            model: doc.model
+          }))
+        )
+      },
+      integrationHints: {
+        backstage: repositories.map((repo) => `Create or enrich Backstage catalog entity for ${repo.name}.`),
+        jira: [
+          "Use endpoints, services, tables, topics, and suggested files as planning context for tickets.",
+          "Attach impacted repositories and graph relationships to implementation subtasks."
+        ],
+        git: [
+          "Use relationships to generate pull-request impact summaries.",
+          "Compare export snapshots across commits to detect newly added APIs, topics, and table dependencies."
+        ],
+        observability: [
+          "Map endpoint names, Kafka topics, and service classes to traces, logs, dashboards, and alerts.",
+          "Use topic publisher/consumer edges to explain incident blast radius."
+        ]
+      }
+    };
+  }
+
   private migrate(): void {
     this.db.exec(`
       create table if not exists schema_meta (
@@ -712,6 +818,17 @@ type DbGraphItemDoc = GraphItemDoc & {
 
 function hydrateNode(row: DbNode): GraphNode {
   return { ...row, metadata: safeJson(row.metadata) };
+}
+
+function exportNode(node: GraphNode): ExportNode {
+  return {
+    id: node.id,
+    kind: node.kind,
+    name: node.name,
+    repo: node.repo,
+    filePath: node.filePath,
+    metadata: node.metadata
+  };
 }
 
 function hydrateEdge(row: DbEdge): GraphEdge {

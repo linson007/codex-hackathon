@@ -69,4 +69,14 @@ describe("api validation", () => {
     expect(response.headers.get("content-type")).toContain("text/event-stream");
     expect(await response.text()).toContain("event: result");
   });
+
+  it("returns enterprise export payloads", async () => {
+    const response = await fetch(`${baseUrl}/api/kbs/demo/export`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      knowledgeBase: { name: "demo" },
+      catalog: expect.any(Object),
+      integrationHints: expect.any(Object)
+    });
+  });
 });

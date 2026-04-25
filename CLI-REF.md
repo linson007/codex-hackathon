@@ -19,6 +19,8 @@ Commands:
   repos [options] [action] [kb] [repo]            Manage repositories linked to a knowledge base
   update [options] <knowledge-base-name>          Refresh a knowledge base using current repository state
   ask [options] <knowledge-base-name> <question>  Ask a natural-language question
+  export [options] <knowledge-base-name>          Export a knowledge base for enterprise integrations
+  jira-plan [options] <knowledge-base-name>       Build or create a Jira planning issue from ContextOS graph facts
   ui [options]                                    Launch the local API and web UI for all knowledge bases
   docs                                            Generate and inspect repository onboarding docs
   stopui [options]                                Stop the local ContextOS API and UI

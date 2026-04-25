@@ -76,8 +76,7 @@ function scanJavaFile(
       metadata: { stereotype: "RestController" }
     });
     addEdge(edges, fileNodeId, classNode.id, "contains", repo.name);
-    const basePath = match(text, /@RequestMapping\("([^"]+)"/) ?? "";
-    for (const endpoint of extractEndpoints(text, basePath)) {
+    for (const endpoint of extractEndpoints(text)) {
       const endpointNode = addNode(nodes, {
         kind: "Endpoint",
         name: `${endpoint.method} ${endpoint.path}`,
@@ -129,10 +128,11 @@ function scanJavaFile(
     const target = addNode(nodes, { kind: "Service", name: feign, repo: repo.name, metadata: { external: true } });
     addEdge(edges, client.id, target.id, "calls", repo.name, { via: "FeignClient" });
   }
-  for (const topic of matches(text, /@KafkaListener\(topics\s*=\s*"([^"]+)"/g)) {
+  for (const topic of extractKafkaListenerTopics(text)) {
     const service = classNode ?? addNode(nodes, { kind: "Service", name: className, repo: repo.name, filePath: absolutePath });
     const topicNode = addNode(nodes, { kind: "Topic", name: topic, repo: repo.name, filePath: absolutePath });
     addEdge(edges, service.id, topicNode.id, "consumes", repo.name);
+    addEdge(edges, topicNode.id, service.id, "depends_on", repo.name, { via: "KafkaListener" });
   }
   for (const topic of matches(text, /send\("([^"]+)"/g)) {
     const service = classNode ?? addNode(nodes, { kind: "Service", name: className, repo: repo.name, filePath: absolutePath });
@@ -150,12 +150,27 @@ function scanJavaFile(
 }
 
 function linkCrossReferences(repoName: string, nodes: Map<string, GraphNode>, edges: Map<string, GraphEdge>): void {
+  linkSourceReferences(repoName, nodes, edges);
   const topics = [...nodes.values()].filter((node) => node.kind === "Topic");
   for (const publisher of topics) {
     for (const consumer of topics) {
       if (publisher.id !== consumer.id && publisher.name === consumer.name) {
         addEdge(edges, publisher.id, consumer.id, "depends_on", repoName, { reason: "same topic" });
       }
+    }
+  }
+}
+
+function linkSourceReferences(repoName: string, nodes: Map<string, GraphNode>, edges: Map<string, GraphEdge>): void {
+  const repoNodes = [...nodes.values()].filter((node) => node.repo === repoName);
+  const sourceNodes = repoNodes.filter((node) => node.kind === "Service" && !node.metadata?.external && node.filePath);
+  const targetNodes = repoNodes.filter((node) => node.kind === "Service" && !node.metadata?.external);
+  for (const source of sourceNodes) {
+    const text = safeRead(source.filePath);
+    if (!text) continue;
+    for (const target of targetNodes) {
+      if (source.id === target.id || !text.includes(target.name)) continue;
+      addEdge(edges, source.id, target.id, "calls", repoName, { via: "source reference" });
     }
   }
 }
@@ -175,17 +190,78 @@ function isInterestingFile(path: string): boolean {
   return /\.(java|xml|ya?ml|properties|sql)$/.test(path) || /build\.gradle$/.test(path);
 }
 
-function extractEndpoints(text: string, basePath: string): Array<{ method: string; path: string }> {
+function extractEndpoints(text: string): Array<{ method: string; path: string }> {
   const endpoints: Array<{ method: string; path: string }> = [];
-  const pattern = /@(Get|Post|Put|Delete|Patch|Request)Mapping(?:\((?:value\s*=\s*)?"([^"]*)")?/g;
+  const classIndex = text.search(/\b(class|interface|enum)\s+[A-Z][A-Za-z0-9_]*/);
+  const classHeader = classIndex >= 0 ? text.slice(0, classIndex) : "";
+  const methodBody = classIndex >= 0 ? text.slice(classIndex) : text;
+  const basePaths = extractRequestMappings(classHeader)
+    .filter((mapping) => mapping.annotation === "Request")
+    .flatMap((mapping) => mapping.paths);
+  const normalizedBasePaths = basePaths.length ? basePaths : [""];
+
+  for (const mapping of extractRequestMappings(methodBody)) {
+    for (const basePath of normalizedBasePaths) {
+      for (const path of mapping.paths) {
+        endpoints.push({ method: mapping.method, path: normalizePath(basePath, path) });
+      }
+    }
+  }
+  return unique(endpoints.map((endpoint) => `${endpoint.method} ${endpoint.path}`)).map((name) => {
+    const [method, ...pathParts] = name.split(" ");
+    return { method, path: pathParts.join(" ") };
+  });
+}
+
+function extractRequestMappings(text: string): Array<{ annotation: string; method: string; paths: string[] }> {
+  const mappings: Array<{ annotation: string; method: string; paths: string[] }> = [];
+  const pattern = /@(Get|Post|Put|Delete|Patch|Request)Mapping(?:\(([\s\S]*?)\))?/g;
   let current: RegExpExecArray | null;
   while ((current = pattern.exec(text))) {
-    if (current[0].includes("@RequestMapping") && current.index < text.indexOf("class ")) continue;
-    const method = current[1] === "Request" ? "ANY" : current[1].toUpperCase();
-    const path = `${basePath}${current[2] ?? ""}`.replace(/\/+/g, "/") || "/";
-    endpoints.push({ method, path });
+    const annotation = current[1];
+    const args = current[2] ?? "";
+    mappings.push({
+      annotation,
+      method: annotation === "Request" ? extractRequestMethod(args) : annotation.toUpperCase(),
+      paths: extractMappingPaths(args)
+    });
   }
-  return endpoints;
+  return mappings;
+}
+
+function extractRequestMethod(args: string): string {
+  return match(args, /method\s*=\s*(?:\{\s*)?RequestMethod\.([A-Z]+)/) ?? "ANY";
+}
+
+function extractMappingPaths(args: string): string[] {
+  const explicitPathValue = match(args, /(?:value|path)\s*=\s*(\{[\s\S]*?\}|"[^"]*")/);
+  if (explicitPathValue) return extractQuotedStrings(explicitPathValue);
+  const directArray = match(args, /^\s*(\{[\s\S]*?\})\s*$/);
+  if (directArray) return extractQuotedStrings(directArray);
+  const directString = match(args, /^\s*"([^"]*)"\s*$/);
+  if (directString !== undefined) return [directString];
+  return [""];
+}
+
+function extractKafkaListenerTopics(text: string): string[] {
+  return unique(
+    matches(text, /@KafkaListener\(([\s\S]*?)\)/g).flatMap((args) => {
+      const topics = match(args, /topics\s*=\s*(\{[\s\S]*?\}|"[^"]*")/);
+      return topics ? extractQuotedStrings(topics) : [];
+    })
+  );
+}
+
+function extractQuotedStrings(text: string): string[] {
+  return matches(text, /"([^"]*)"/g);
+}
+
+function normalizePath(basePath: string, path: string): string {
+  return `/${[basePath, path]
+    .filter(Boolean)
+    .join("/")
+    .replace(/\/+/g, "/")
+    .replace(/^\/|\/$/g, "")}`;
 }
 
 function extractTables(text: string): string[] {
@@ -224,6 +300,15 @@ function match(text: string, pattern: RegExp, group = 1): string | undefined {
 
 function matches(text: string, pattern: RegExp): string[] {
   return [...text.matchAll(pattern)].map((item) => item[1]).filter(Boolean);
+}
+
+function safeRead(path: string | undefined): string {
+  if (!path) return "";
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
+  }
 }
 
 function unique<T>(values: T[]): T[] {

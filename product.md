@@ -2,7 +2,7 @@
 
 ## Tagline
 
-AI knowledge graph for enterprise microservices.
+Local codebase knowledge for developers and AI agents.
 
 ## Problem
 
@@ -10,7 +10,7 @@ Large enterprise codebases have multiple Spring Boot services, many repositories
 
 ## Solution
 
-ContextOS continuously scans repositories and builds live knowledge bases that developers can query from the command line or UI.
+ContextOS continuously scans repositories and builds live local knowledge bases. Developers can read onboarding docs and dependency views in the web UI, while Codex, Claude, or other coding agents can query the same context from the CLI through `SKILL.md`.
 
 A knowledge base can represent:
 
@@ -32,6 +32,7 @@ contextos update retail-platform
 contextos docs generate retail-platform --force
 contextos ask retail-platform "Which services handle refunds?"
 contextos ask retail-platform "What is impacted if I change refund eligibility logic?" --with-docs
+contextos jira-plan retail-platform --ticket "Change refund eligibility logic"
 contextos ui
 ```
 
@@ -123,6 +124,28 @@ contextos stopui
 
 The UI starts the local API and Vite UI together. `stopui` stops both from the CLI.
 
+### export
+
+Export a knowledge base for external tools.
+
+```bash
+contextos export <kb> --format json
+```
+
+The export includes repository status, services, controllers, clients, endpoints, tables, topics, relationships, docs summaries, and integration hints for tools such as Jira, Backstage, CI, or custom automations. This is optional for agent usage; Codex or Claude should normally use the local skill and call `contextos ask` directly.
+
+### jira-plan
+
+Build or create Jira planning context from ContextOS graph facts.
+
+```bash
+contextos jira-plan <kb> --ticket "Change refund eligibility logic"
+contextos jira-plan <kb> --ticket "Change refund eligibility logic" --json
+contextos jira-plan <kb> --ticket "Change refund eligibility logic" --create
+```
+
+Dry-run mode prints impact analysis and suggested subtasks. `--create` calls Jira Cloud using `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, and `JIRA_PROJECT_KEY`.
+
 ## What Gets Indexed
 
 - pom.xml / gradle files
@@ -174,6 +197,7 @@ The UI starts the local API and Vite UI together. `stopui` stops both from the C
 - Repo freshness status
 - Repository onboarding documentation
 - Service and endpoint documentation
+- Enterprise integration JSON preview and copy action
 - Dark mode toggle
 - Suggested files to inspect
 

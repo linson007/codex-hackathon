@@ -90,6 +90,38 @@ type AskResult = {
   model?: string;
   evidence: { nodes: Node[]; edges: Edge[]; suggestedFiles: string[]; docs?: Array<{ kind: string; name: string; repoName: string }> };
 };
+type EnterpriseExport = {
+  exportedAt: string;
+  knowledgeBase: KnowledgeBase;
+  repositories: RepoOverview[];
+  catalog: {
+    services: Node[];
+    controllers: Node[];
+    clients: Node[];
+    endpoints: Node[];
+    tables: Node[];
+    topics: Node[];
+  };
+  relationships: Array<Edge & { from?: Node; to?: Node }>;
+  docs: {
+    repositories: Array<{ repoName: string; summary: string; generatedAt: string; mode: string; model?: string }>;
+    items: Array<{
+      nodeId: string;
+      repoName: string;
+      nodeKind: string;
+      nodeName: string;
+      summary: string;
+      generatedAt: string;
+      mode: string;
+    }>;
+  };
+  integrationHints: {
+    backstage: string[];
+    jira: string[];
+    git: string[];
+    observability: string[];
+  };
+};
 type GraphCategory = "Controller" | "Service" | "Client" | "Repository" | "Endpoint" | "Topic" | "Table" | "External";
 type GraphNodeData = { label: string; sublabel: string; category: GraphCategory };
 type GraphViewNode = FlowNode<GraphNodeData, "graphNode">;
@@ -104,6 +136,7 @@ function App() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [selectedKb, setSelectedKb] = useState("");
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [enterpriseExport, setEnterpriseExport] = useState<EnterpriseExport | null>(null);
   const [repoOverviews, setRepoOverviews] = useState<RepoOverview[]>([]);
   const [selectedRepo, setSelectedRepo] = useState("");
   const [repoDoc, setRepoDoc] = useState<RepoDoc | null>(null);
@@ -113,6 +146,7 @@ function App() {
   const [docVariant, setDocVariant] = useState<DocVariant>("llm");
   const [askIncludeDocs, setAskIncludeDocs] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem("contextos-theme") === "dark" ? "dark" : "light"));
+  const [showExportPanel, setShowExportPanel] = useState(false);
   const [question, setQuestion] = useState("What is impacted if I change refund eligibility logic?");
   const [answer, setAnswer] = useState<AskResult | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState("");
@@ -139,6 +173,7 @@ function App() {
   useEffect(() => {
     if (!selectedKb) {
       setSummary(null);
+      setEnterpriseExport(null);
       setRepoOverviews([]);
       setSelectedRepo("");
       return;
@@ -148,10 +183,12 @@ function App() {
     setAskStatus("");
     Promise.all([
       fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}`).then((res) => res.json()),
-      fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos`).then((res) => res.json())
+      fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos`).then((res) => res.json()),
+      fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/export`).then((res) => res.json())
     ])
-      .then(([kbSummary, repoPayload]: [Summary, { repositories: RepoOverview[] }]) => {
+      .then(([kbSummary, repoPayload, exportPayload]: [Summary, { repositories: RepoOverview[] }, EnterpriseExport]) => {
         setSummary(kbSummary);
+        setEnterpriseExport(exportPayload);
         setRepoOverviews(repoPayload.repositories);
         setSelectedRepo((current) =>
           repoPayload.repositories.some((repo) => repo.name === current) ? current : repoPayload.repositories[0]?.name || ""
@@ -205,6 +242,14 @@ function App() {
   const endpoints = useMemo(() => summary?.nodes.filter((node) => node.kind === "Endpoint") ?? [], [summary]);
   const tables = useMemo(() => summary?.nodes.filter((node) => node.kind === "Table") ?? [], [summary]);
   const topics = useMemo(() => summary?.nodes.filter((node) => node.kind === "Topic") ?? [], [summary]);
+  const askSuggestions = useMemo(
+    () =>
+      buildAskSuggestions(
+        summary?.nodes ?? [],
+        repoOverviews.map((repo) => repo.name)
+      ),
+    [summary, repoOverviews]
+  );
   const serviceDocItems = useMemo(() => docItems.filter((item) => item.nodeKind === "Service"), [docItems]);
   const controllerDocItems = useMemo(
     () => serviceDocItems.filter((item) => item.metadata?.stereotype === "RestController"),
@@ -311,14 +356,26 @@ function App() {
     }
   }
 
+  async function copyEnterpriseExport() {
+    if (!enterpriseExport) return;
+    await navigator.clipboard.writeText(JSON.stringify(enterpriseExport, null, 2));
+  }
+
   return (
     <main>
       <header>
         <div>
           <h1>ContextOS</h1>
-          <p>AI knowledge graph for enterprise microservices</p>
+          <p>Local codebase knowledge for developers and AI agents</p>
         </div>
         <div className="headerActions">
+          <button
+            className="secondaryHeaderAction"
+            aria-label="Open ContextOS export JSON"
+            onClick={() => setShowExportPanel((current) => !current)}
+          >
+            Export JSON
+          </button>
           <button
             className="themeToggle"
             aria-label={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
@@ -331,6 +388,48 @@ function App() {
           </div>
         </div>
       </header>
+
+      {showExportPanel && (
+        <section className="exportDrawer" aria-label="ContextOS export JSON">
+          <div className="sectionTitle">
+            <div>
+              <h2>Agent / Tool Export</h2>
+              <p>
+                Optional JSON for Jira, Backstage, CI checks, or local automations. Humans can use the docs in this UI; Codex and Claude
+                skills should usually call <code>contextos ask</code> directly.
+              </p>
+            </div>
+            <span>{enterpriseExport ? `Exported ${new Date(enterpriseExport.exportedAt).toLocaleString()}` : "No export yet"}</span>
+          </div>
+          <div className="enterpriseSummary compact">
+            <div>
+              <strong>{enterpriseExport?.repositories.length ?? 0}</strong>
+              <span>Repos</span>
+            </div>
+            <div>
+              <strong>{enterpriseExport?.catalog.endpoints.length ?? 0}</strong>
+              <span>APIs</span>
+            </div>
+            <div>
+              <strong>{enterpriseExport?.relationships.length ?? 0}</strong>
+              <span>Edges</span>
+            </div>
+            <div>
+              <strong>{(enterpriseExport?.catalog.topics.length ?? 0) + (enterpriseExport?.catalog.tables.length ?? 0)}</strong>
+              <span>Data/events</span>
+            </div>
+          </div>
+          <div className="exportPreview">
+            <div className="exportHeader">
+              <strong>Integration JSON</strong>
+              <button onClick={copyEnterpriseExport} disabled={!enterpriseExport}>
+                Copy JSON
+              </button>
+            </div>
+            <pre>{enterpriseExport ? JSON.stringify(enterpriseExport, null, 2).slice(0, 4000) : "Select a knowledge base."}</pre>
+          </div>
+        </section>
+      )}
 
       <section className="workspace">
         <div className="ask">
@@ -350,6 +449,15 @@ function App() {
               {loading ? "Streaming..." : "Ask"}
             </button>
           </div>
+          {askSuggestions.length > 0 && (
+            <div className="suggestions" aria-label="Suggested questions">
+              {askSuggestions.map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => setQuestion(suggestion)}>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
           {(loading || askStatus) && (
             <div className="askStatus" role="status" aria-live="polite">
               <span className={loading ? "pulseDot active" : "pulseDot"} />
@@ -650,6 +758,27 @@ function docStatus(doc: RepoDoc | ItemDoc, variant: DocVariant): string {
   }
   const generatedAt = doc.deterministicGeneratedAt ?? doc.generatedAt;
   return `LLM docs not generated; showing deterministic facts from ${new Date(generatedAt).toLocaleString()}`;
+}
+
+function buildAskSuggestions(nodes: Node[], repoNames: string[]): string[] {
+  const services = nodes.filter((node) => node.kind === "Service" && !node.metadata?.external).map((node) => node.name);
+  const endpoints = nodes.filter((node) => node.kind === "Endpoint").map((node) => node.name);
+  const tables = nodes.filter((node) => node.kind === "Table").map((node) => node.name);
+  const topics = nodes.filter((node) => node.kind === "Topic").map((node) => node.name);
+  return uniqueStrings([
+    "What is impacted if I change refund eligibility logic?",
+    services[0] ? `Explain the responsibilities of ${services[0]}.` : "",
+    endpoints[0] ? `Trace the request flow for ${endpoints[0]}.` : "",
+    tables[0] ? `Which code paths use the ${tables[0]} table?` : "",
+    topics[0] ? `Who publishes or consumes ${topics[0]}?` : "",
+    repoNames[0] ? `Summarize ${repoNames[0]} for a new joiner.` : ""
+  ])
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 async function readServerEvents(

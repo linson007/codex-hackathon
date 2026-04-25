@@ -7,6 +7,7 @@ import ora from "ora";
 import { answerQuestion, generateGraphItemDocumentation, generateRepositoryDocumentation } from "@contextos/ai";
 import { scanRepository } from "@contextos/scanner";
 import { ensureKbExists, kbRoot, knowledgeBasesRoot, listKnowledgeBases, openKnowledgeBase } from "@contextos/store";
+import { buildJiraIssueFields, buildJiraPlan, createJiraIssueFromPlan, formatJiraPlan } from "./jira.js";
 
 const program = new Command();
 
@@ -130,6 +131,52 @@ program
       console.log(
         `\nmode=${result.mode}${result.model ? ` model=${result.model}` : ""} evidence=${options.withDocs ? "graph+docs" : "graph"}`
       );
+    } finally {
+      store.close();
+    }
+  });
+
+program
+  .command("export")
+  .argument("<knowledge-base-name>")
+  .addOption(new Option("--format <format>", "Export format").choices(["json"]).default("json"))
+  .option("--no-pretty", "Print compact JSON")
+  .description("Export a knowledge base for enterprise integrations")
+  .action((kb, options) => {
+    const store = openKnowledgeBase(kb);
+    try {
+      if (options.format !== "json") throw new Error("Only json export is supported.");
+      console.log(JSON.stringify(store.enterpriseExport(), null, options.pretty === false ? 0 : 2));
+    } finally {
+      store.close();
+    }
+  });
+
+program
+  .command("jira-plan")
+  .argument("<knowledge-base-name>")
+  .option("--ticket <text>", "Ticket text to analyze", "Change refund eligibility logic")
+  .option("--project <key>", "Jira project key, defaults to JIRA_PROJECT_KEY")
+  .option("--issue-type <name>", "Jira issue type", process.env.JIRA_ISSUE_TYPE ?? "Task")
+  .option("--create", "Create a real Jira Cloud issue using JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN")
+  .option("--json", "Print Jira issue JSON payload instead of human-readable plan")
+  .description("Build or create a Jira planning issue from ContextOS graph facts")
+  .action(async (kb, options) => {
+    const store = openKnowledgeBase(kb);
+    try {
+      const plan = buildJiraPlan(store.enterpriseExport(), options.ticket);
+      const projectKey = options.project ?? process.env.JIRA_PROJECT_KEY ?? "CTX";
+      if (options.json) {
+        console.log(JSON.stringify(buildJiraIssueFields(plan, projectKey, options.issueType), null, 2));
+        return;
+      }
+      console.log(formatJiraPlan(plan));
+      if (!options.create) {
+        console.log("Dry run only. Add --create and set JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN, and JIRA_PROJECT_KEY to create it.");
+        return;
+      }
+      const issue = await createJiraIssueFromPlan(plan, projectKey, options.issueType);
+      console.log(`Created Jira issue ${issue.key}: ${issue.self}`);
     } finally {
       store.close();
     }

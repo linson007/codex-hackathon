@@ -38,6 +38,20 @@ Each KB has a `contextos.db` file. The main data groups are:
 
 For generated docs, ContextOS keeps deterministic facts and LLM docs side by side. UI docs default to the LLM version if present, and fall back to deterministic docs if not.
 
+Schema versioning and future migration rules are documented in [SQLITE_MIGRATIONS.md](SQLITE_MIGRATIONS.md).
+
+## Agent And Tool Export
+
+The primary integration is local and serves two users: humans use the web UI for onboarding docs and graph exploration, while a local Codex/Claude skill calls `contextos update`, `contextos ask`, and `contextos docs view` to retrieve codebase context from the developer machine.
+
+`ContextStore.enterpriseExport()` builds a stable JSON payload for external tools that need structured data. It is exposed through:
+
+- `contextos export <kb> --format json`
+- `GET /api/kbs/:kb/export`
+- the UI `Export JSON` header button
+
+The payload includes repository status, catalog groups, graph relationships with resolved node details, docs summaries, and integration hints. It is useful for Jira, Backstage, CI checks, and custom automations, but is optional for normal agent Q&A. See [ENTERPRISE_INTEGRATION.md](ENTERPRISE_INTEGRATION.md).
+
 ## UI And Graph Technology
 
 The web UI is built with React and Vite. During development, `contextos ui` starts the API and Vite dev server together. For built/demo mode, `apps/api` serves static assets from `apps/ui/dist` while keeping `/api/*` routes ahead of the SPA fallback.

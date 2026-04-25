@@ -80,6 +80,41 @@ describe("repository docs storage", () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it("exports an enterprise integration payload", () => {
+    const home = mkdtempSync(resolve(tmpdir(), "contextos-store-"));
+    const previousHome = process.env.CONTEXTOS_HOME;
+    process.env.CONTEXTOS_HOME = home;
+    try {
+      ensureKbExists("export-test");
+      const store = openKnowledgeBase("export-test");
+      const repo = store.addRepository(resolve("samples/retail-platform/order-service"));
+      const service = graphNode("Service", "RefundEligibilityService", repo.name);
+      const endpoint = graphNode("Endpoint", "POST /orders/{orderId}/refund-eligibility", repo.name);
+      const edge = {
+        id: stableId("edge", `${service.id}:exposes:${endpoint.id}`),
+        fromId: service.id,
+        toId: endpoint.id,
+        kind: "exposes" as const,
+        metadata: {}
+      };
+      store.replaceGraphForRepository(repo, [service, endpoint], [edge]);
+
+      const exported = store.enterpriseExport();
+
+      expect(exported.knowledgeBase.name).toBe("export-test");
+      expect(exported.repositories).toHaveLength(1);
+      expect(exported.catalog.services.some((node) => node.name === "RefundEligibilityService")).toBe(true);
+      expect(exported.catalog.endpoints.some((node) => node.name.includes("refund-eligibility"))).toBe(true);
+      expect(exported.relationships[0].from?.name).toBe("RefundEligibilityService");
+      expect(exported.integrationHints.backstage[0]).toContain("order-service");
+      store.close();
+    } finally {
+      if (previousHome) process.env.CONTEXTOS_HOME = previousHome;
+      else delete process.env.CONTEXTOS_HOME;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
 });
 
 function graphNode(kind: GraphNode["kind"], name: string, repo: string): GraphNode {

@@ -49,6 +49,16 @@ app.get("/api/kbs/:kb", (req, res) => {
   }
 });
 
+app.get("/api/kbs/:kb/export", (req, res) => {
+  const kb = requireKbName(req.params.kb);
+  const store = openKnowledgeBase(kb);
+  try {
+    res.json(store.enterpriseExport());
+  } finally {
+    store.close();
+  }
+});
+
 app.post("/api/kbs/:kb/ask", async (req, res, next) => {
   try {
     const kb = requireKbName(req.params.kb);

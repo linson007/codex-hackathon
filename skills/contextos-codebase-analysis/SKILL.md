@@ -5,7 +5,7 @@ description: Use ContextOS to create, update, query, and inspect local knowledge
 
 # ContextOS Codebase Analysis
 
-Use ContextOS when a user needs codebase understanding across one or more repositories: impact analysis, service discovery, onboarding, dependency tracing, or graph-backed answers.
+Use ContextOS when a user needs codebase understanding across one or more local repositories: impact analysis, service discovery, onboarding, dependency tracing, or graph-backed answers.
 
 ContextOS stores local knowledge bases under `~/.contextos/kbs` by default. Set `CONTEXTOS_HOME=/custom/path` only when the user asks for a different storage location.
 
@@ -13,6 +13,8 @@ ContextOS has two evidence layers:
 
 - Graph facts: deterministic scanner output in SQLite. This is the source of truth for impact analysis.
 - Generated docs: cached Markdown onboarding docs for repositories, services, and endpoints. These prefer LLM docs when available and fall back to deterministic facts.
+
+The primary pattern is shared local context: humans use the web UI for onboarding docs and dependency exploration, while Codex/Claude calls `contextos ask` or `contextos docs view` when it needs project context. The JSON export is optional and mainly useful for external tools such as Jira, Backstage, CI checks, or custom automations.
 
 ## Quick Start
 
@@ -46,6 +48,7 @@ If `contextos` is unavailable, replace it with `./bin/contextos.js` in the comma
 6. Generate or refresh onboarding docs with `contextos docs generate <kb> --force` when the user wants richer repo/service/endpoint docs.
 7. Start the UI only when the user asks for visual exploration: `contextos ui`.
 8. Stop the UI with `contextos stopui` when done or when ports are stuck.
+9. Use `contextos export <kb> --format json` only when another tool needs a structured payload.
 
 ## Creating A Knowledge Base
 
