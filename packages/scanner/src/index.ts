@@ -68,7 +68,13 @@ function scanJavaFile(
   const className = match(text, /\b(class|interface|enum)\s+([A-Z][A-Za-z0-9_]*)/, 2) ?? basename(relPath, ".java");
   let classNode: GraphNode | undefined;
   if (/@RestController/.test(text)) {
-    classNode = addNode(nodes, { kind: "Service", name: className, repo: repo.name, filePath: absolutePath, metadata: { stereotype: "RestController" } });
+    classNode = addNode(nodes, {
+      kind: "Service",
+      name: className,
+      repo: repo.name,
+      filePath: absolutePath,
+      metadata: { stereotype: "RestController" }
+    });
     addEdge(edges, fileNodeId, classNode.id, "contains", repo.name);
     const basePath = match(text, /@RequestMapping\("([^"]+)"/) ?? "";
     for (const endpoint of extractEndpoints(text, basePath)) {
@@ -83,11 +89,23 @@ function scanJavaFile(
     }
   }
   if (/@Service/.test(text)) {
-    classNode = addNode(nodes, { kind: "Service", name: className, repo: repo.name, filePath: absolutePath, metadata: { stereotype: "Service" } });
+    classNode = addNode(nodes, {
+      kind: "Service",
+      name: className,
+      repo: repo.name,
+      filePath: absolutePath,
+      metadata: { stereotype: "Service" }
+    });
     addEdge(edges, fileNodeId, classNode.id, "contains", repo.name);
   }
   if (/@Repository/.test(text)) {
-    classNode = addNode(nodes, { kind: "Service", name: className, repo: repo.name, filePath: absolutePath, metadata: { stereotype: "Repository" } });
+    classNode = addNode(nodes, {
+      kind: "Service",
+      name: className,
+      repo: repo.name,
+      filePath: absolutePath,
+      metadata: { stereotype: "Repository" }
+    });
     addEdge(edges, fileNodeId, classNode.id, "contains", repo.name);
   }
   if (/@Entity/.test(text)) {
@@ -101,7 +119,13 @@ function scanJavaFile(
   }
   const feign = match(text, /@FeignClient\(name\s*=\s*"([^"]+)"/);
   if (feign) {
-    const client = addNode(nodes, { kind: "Service", name: className, repo: repo.name, filePath: absolutePath, metadata: { stereotype: "FeignClient", target: feign } });
+    const client = addNode(nodes, {
+      kind: "Service",
+      name: className,
+      repo: repo.name,
+      filePath: absolutePath,
+      metadata: { stereotype: "FeignClient", target: feign }
+    });
     const target = addNode(nodes, { kind: "Service", name: feign, repo: repo.name, metadata: { external: true } });
     addEdge(edges, client.id, target.id, "calls", repo.name, { via: "FeignClient" });
   }
@@ -117,7 +141,10 @@ function scanJavaFile(
   }
   for (const symbol of ["refund", "eligibility", "order", "billing", "notification"]) {
     if (text.toLowerCase().includes(symbol) && classNode) {
-      classNode.metadata = { ...(classNode.metadata ?? {}), keywords: unique([...(classNode.metadata?.keywords as string[] | undefined ?? []), symbol]) };
+      classNode.metadata = {
+        ...(classNode.metadata ?? {}),
+        keywords: unique([...((classNode.metadata?.keywords as string[] | undefined) ?? []), symbol])
+      };
     }
   }
 }
@@ -177,7 +204,14 @@ function addNode(nodes: Map<string, GraphNode>, node: Omit<GraphNode, "id">): Gr
   return full;
 }
 
-function addEdge(edges: Map<string, GraphEdge>, fromId: string, toId: string, kind: GraphEdge["kind"], repo: string, metadata: Record<string, unknown> = {}): GraphEdge {
+function addEdge(
+  edges: Map<string, GraphEdge>,
+  fromId: string,
+  toId: string,
+  kind: GraphEdge["kind"],
+  repo: string,
+  metadata: Record<string, unknown> = {}
+): GraphEdge {
   const id = stableId("edge", `${fromId}:${kind}:${toId}:${JSON.stringify(metadata)}`);
   const edge = { id, fromId, toId, kind, metadata };
   edges.set(id, edge);

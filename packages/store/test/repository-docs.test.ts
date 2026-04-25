@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { ensureKbExists, openKnowledgeBase, stableId, type GraphNode } from "../src/index";
+import { CURRENT_SCHEMA_VERSION, ensureKbExists, openKnowledgeBase, stableId, type GraphNode } from "../src/index";
 
 describe("repository docs storage", () => {
   it("stores docs and marks them stale when the graph fingerprint changes", () => {
@@ -45,6 +46,34 @@ describe("repository docs storage", () => {
       store.replaceGraphForRepository(repo, [node, graphNode("Table", "orders", repo.name)], []);
       expect(store.getRepositoryOverviews()[0].docStale).toBe(true);
       store.close();
+    } finally {
+      if (previousHome) process.env.CONTEXTOS_HOME = previousHome;
+      else delete process.env.CONTEXTOS_HOME;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("records the SQLite schema version and rejects newer schemas", () => {
+    const home = mkdtempSync(resolve(tmpdir(), "contextos-store-"));
+    const previousHome = process.env.CONTEXTOS_HOME;
+    process.env.CONTEXTOS_HOME = home;
+    try {
+      ensureKbExists("schema-test");
+      const store = openKnowledgeBase("schema-test");
+      const dbPath = store.dbPath;
+      store.close();
+
+      const db = new Database(dbPath);
+      try {
+        expect(db.prepare("select value from schema_meta where key = 'schema_version'").get()).toMatchObject({
+          value: String(CURRENT_SCHEMA_VERSION)
+        });
+        db.prepare("update schema_meta set value = ? where key = 'schema_version'").run(String(CURRENT_SCHEMA_VERSION + 1));
+      } finally {
+        db.close();
+      }
+
+      expect(() => openKnowledgeBase("schema-test")).toThrow(/newer than this app supports/);
     } finally {
       if (previousHome) process.env.CONTEXTOS_HOME = previousHome;
       else delete process.env.CONTEXTOS_HOME;

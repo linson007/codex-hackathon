@@ -1,11 +1,19 @@
 :root {
-  color: #172018;
-  background: #f6f7f2;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 
 body {
   margin: 0;
+  background: var(--color-bg);
 }
 
 main {
@@ -22,7 +30,15 @@ header {
   margin-bottom: 24px;
 }
 
-h1, h2, p {
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+h1,
+h2,
+p {
   margin: 0;
 }
 
@@ -36,8 +52,9 @@ h2 {
   margin-bottom: 12px;
 }
 
-.status, .mode {
-  color: #51604f;
+.status,
+.mode {
+  color: var(--color-muted);
   font-size: 14px;
 }
 
@@ -47,11 +64,18 @@ h2 {
   gap: 18px;
 }
 
-.ask, aside, .panel, .graph, .repoDocsList, .repoDocDetail {
-  background: #ffffff;
-  border: 1px solid #dfe4da;
+.ask,
+aside,
+.panel,
+.graph,
+.repoDocsList,
+.repoDocDetail {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   padding: 16px;
+  box-shadow: var(--shadow-glass);
+  backdrop-filter: blur(10px);
 }
 
 .query {
@@ -69,8 +93,42 @@ h2 {
 }
 
 .askMode > span {
-  color: #51604f;
+  color: var(--color-muted);
   font-size: 14px;
+}
+
+.askStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin-top: 10px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.pulseDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-muted);
+}
+
+.pulseDot.active {
+  background: var(--color-accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 .kbPicker {
@@ -82,45 +140,65 @@ h2 {
 }
 
 .kbPicker label {
-  color: #51604f;
+  color: var(--color-muted);
   font-size: 14px;
 }
 
-input, button, select {
+input,
+button,
+select {
   border-radius: 6px;
-  border: 1px solid #bcc7b6;
+  border: 1px solid var(--color-border-strong);
   font: inherit;
   padding: 10px 12px;
 }
 
+input {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
 select {
-  background: #fff;
-  color: #172018;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 button {
-  background: #245c39;
-  color: #fff;
-  border-color: #245c39;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  border-color: var(--color-primary);
   cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary), transparent 55%);
+  outline-offset: 2px;
 }
 
 button:disabled {
   opacity: 0.65;
 }
 
+.themeToggle {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-color: var(--color-border-strong);
+}
+
 .answer {
   min-height: 220px;
   margin: 16px 0 8px;
   padding: 14px;
-  background: #f3f5ef;
+  background: var(--color-surface-muted);
   border-radius: 6px;
   overflow: auto;
   line-height: 1.5;
 }
 
 .answer.empty {
-  color: #657063;
+  color: var(--color-muted);
 }
 
 .answer h1,
@@ -160,8 +238,9 @@ button:disabled {
 }
 
 .answer code {
-  background: #e6ebe2;
-  border: 1px solid #d7dfd2;
+  background: var(--color-code-bg);
+  color: var(--color-code-fg);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 0.92em;
@@ -183,8 +262,8 @@ button:disabled {
 }
 
 .mermaidDiagram {
-  background: #fff;
-  border: 1px solid #d7dfd2;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   margin: 10px 0 16px;
   padding: 12px;
@@ -212,16 +291,17 @@ button:disabled {
 
 .answer th,
 .answer td {
-  border: 1px solid #d7dfd2;
+  border: 1px solid var(--color-border);
   padding: 8px;
   text-align: left;
 }
 
 .answer th {
-  background: #e6ebe2;
+  background: var(--color-code-bg);
 }
 
-.repo, .item {
+.repo,
+.item {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -237,8 +317,9 @@ button:disabled {
   word-break: break-word;
 }
 
-.repo span, .item span {
-  color: #657063;
+.repo span,
+.item span {
+  color: var(--color-muted);
   font-size: 13px;
   text-align: right;
   flex-shrink: 0;
@@ -252,8 +333,8 @@ button:disabled {
   justify-content: space-between;
   gap: 12px;
   background: #fff;
-  color: #172018;
-  border-color: #edf0e9;
+  color: var(--color-text);
+  border-color: var(--color-border);
   border-width: 1px 0 0;
   border-radius: 0;
   padding: 10px 0;
@@ -261,12 +342,12 @@ button:disabled {
 }
 
 .kbRow.active {
-  color: #245c39;
+  color: var(--color-primary);
   font-weight: 700;
 }
 
 .kbRow span {
-  color: #657063;
+  color: var(--color-muted);
   font-size: 13px;
   text-align: right;
 }
@@ -299,7 +380,8 @@ button:disabled {
   overflow: hidden;
 }
 
-.sectionTitle, .docHeader {
+.sectionTitle,
+.docHeader {
   display: flex;
   justify-content: space-between;
   gap: 16px;
@@ -321,32 +403,32 @@ button:disabled {
 .docToggle {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(64px, 1fr));
-  border: 1px solid #bcc7b6;
+  border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   overflow: hidden;
-  background: #fff;
+  background: var(--color-surface);
 }
 
 .docToggle button {
   border: 0;
   border-radius: 0;
-  background: #fff;
-  color: #245c39;
+  background: var(--color-surface);
+  color: var(--color-primary);
   padding: 9px 10px;
 }
 
 .docToggle button + button {
-  border-left: 1px solid #bcc7b6;
+  border-left: 1px solid var(--color-border-strong);
 }
 
 .docToggle button.active {
-  background: #245c39;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-bg);
 }
 
 .docToggle button:disabled {
-  color: #93a08f;
-  background: #f3f5ef;
+  color: color-mix(in srgb, var(--color-muted), transparent 35%);
+  background: var(--color-surface-muted);
   cursor: not-allowed;
 }
 
@@ -359,9 +441,9 @@ button:disabled {
 .repoCard {
   width: 100%;
   display: block;
-  background: #fff;
-  color: #172018;
-  border: 1px solid #dfe4da;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 10px;
@@ -371,8 +453,8 @@ button:disabled {
 }
 
 .repoCard.active {
-  border-color: #245c39;
-  background: #f3f8f0;
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
 
 .repoCard strong,
@@ -385,13 +467,13 @@ button:disabled {
 }
 
 .repoCard span {
-  color: #42513f;
+  color: var(--color-muted);
   margin-top: 6px;
   line-height: 1.4;
 }
 
 .repoCard small {
-  color: #657063;
+  color: var(--color-muted);
   margin-top: 8px;
 }
 
@@ -400,13 +482,13 @@ button:disabled {
 }
 
 .docSubsection {
-  border-top: 1px solid #edf0e9;
+  border-top: 1px solid var(--color-border);
   margin-top: 18px;
   padding-top: 14px;
 }
 
 .endpointChildren {
-  border-left: 2px solid #dfe4da;
+  border-left: 2px solid var(--color-border);
   margin: -4px 0 12px 16px;
   padding-left: 12px;
 }
@@ -414,8 +496,8 @@ button:disabled {
 .endpointLink {
   width: 100%;
   display: block;
-  background: #fff;
-  color: #172018;
+  background: var(--color-surface);
+  color: var(--color-text);
   border: 0;
   border-radius: 6px;
   padding: 8px 10px;
@@ -426,8 +508,8 @@ button:disabled {
 }
 
 .endpointLink.active {
-  background: #e9f1e6;
-  color: #245c39;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .endpointLink strong,
@@ -443,7 +525,7 @@ button:disabled {
 }
 
 .endpointLink span {
-  color: #657063;
+  color: var(--color-muted);
   font-size: 12px;
   margin-top: 3px;
 }
@@ -456,11 +538,123 @@ button:disabled {
   position: relative;
   height: 520px;
   border-radius: 8px;
-  background:
-    linear-gradient(90deg, rgba(36, 92, 57, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(36, 92, 57, 0.08) 1px, transparent 1px);
-  background-size: 36px 36px;
   overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.react-flow {
+  background: transparent;
+}
+
+.react-flow__controls,
+.react-flow__minimap {
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-glass);
+}
+
+.react-flow__controls-button {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-bottom-color: var(--color-border);
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.flowEdge path {
+  stroke: var(--color-muted);
+  stroke-width: 1.8;
+}
+
+.flowEdge.edge-calls path {
+  stroke: #8b5f2a;
+}
+
+.flowEdge.edge-consumes path,
+.flowEdge.edge-depends_on path {
+  stroke: #376b88;
+}
+
+.flowEdge.edge-exposes path {
+  stroke: var(--color-primary);
+}
+
+.flowEdge.edge-writes path {
+  stroke: #7d557d;
+}
+
+.graphNodeCard {
+  width: 190px;
+  min-height: 58px;
+  background: var(--color-surface);
+  border: 1px solid #b8ceb0;
+  border-radius: 8px;
+  padding: 10px;
+  box-sizing: border-box;
+  box-shadow: 0 8px 20px rgba(23, 32, 24, 0.08);
+}
+
+.graphNodeCard.controller {
+  background: #e9f1e6;
+  border-color: #a8c6a0;
+}
+
+.graphNodeCard.service {
+  background: #edf5ef;
+  border-color: #9fc3aa;
+}
+
+.graphNodeCard.client {
+  background: #fff4e8;
+  border-color: #ddb989;
+}
+
+.graphNodeCard.repository {
+  background: #f0eef8;
+  border-color: #c2b9df;
+}
+
+.graphNodeCard.external {
+  background: #f7f7f7;
+  border-color: #cfcfcf;
+}
+
+.graphNodeCard.endpoint {
+  background: #eef4fb;
+  border-color: #b7cce0;
+}
+
+.graphNodeCard.topic {
+  background: #f4f1e7;
+  border-color: #d5c99f;
+}
+
+.graphNodeCard.table {
+  background: #f5edf5;
+  border-color: #d4b9d4;
+}
+
+:root[data-theme="dark"] .graphNodeCard {
+  color: #172018;
+}
+
+.graphNodeCard strong,
+.graphNodeCard span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.graphNodeCard strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.graphNodeCard span {
+  color: #52614f;
+  font-size: 12px;
+  margin-top: 6px;
 }
 
 .edgeLayer {
@@ -556,7 +750,8 @@ button:disabled {
   border-color: #d4b9d4;
 }
 
-.graphNode strong, .graphNode span {
+.graphNode strong,
+.graphNode span {
   display: block;
 }
 
@@ -641,7 +836,8 @@ button:disabled {
   main {
     padding: 18px;
   }
-  header, .workspace {
+  header,
+  .workspace {
     display: block;
   }
   aside {

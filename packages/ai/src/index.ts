@@ -1,5 +1,14 @@
 import OpenAI from "openai";
-import type { EvidenceBundle, GraphEdge, GraphItemDoc, GraphItemDocEvidence, GraphNode, RepositoryDoc, RepositoryDocEvidence } from "@contextos/store";
+import type { ResponseStreamEvent } from "openai/resources/responses/responses";
+import type {
+  EvidenceBundle,
+  GraphEdge,
+  GraphItemDoc,
+  GraphItemDocEvidence,
+  GraphNode,
+  RepositoryDoc,
+  RepositoryDocEvidence
+} from "@contextos/store";
 
 export type AskResult = {
   answer: string;
@@ -7,6 +16,8 @@ export type AskResult = {
   model?: string;
   evidence: EvidenceBundle;
 };
+
+export type AskStreamEvent = { type: "status"; message: string } | { type: "delta"; delta: string } | { type: "result"; result: AskResult };
 
 export async function answerQuestion(evidence: EvidenceBundle): Promise<AskResult> {
   if (!process.env.OPENAI_API_KEY) {
@@ -18,12 +29,7 @@ export async function answerQuestion(evidence: EvidenceBundle): Promise<AskResul
     const client = new OpenAI();
     const response = await client.responses.create({
       model,
-      instructions: [
-        "You are ContextOS, an enterprise codebase assistant. Answer only from the provided evidence.",
-        "Graph nodes, edges, repositories, and suggested files are authoritative.",
-        "Generated docs, when present, may be used for explanatory context and onboarding wording, but do not override graph facts.",
-        "Be concise, name impacted services, endpoints, tables, topics, and files. If evidence is incomplete, say what is missing."
-      ].join(" "),
+      instructions: askInstructions(),
       input: JSON.stringify(toCompactEvidence(evidence), null, 2)
     });
     return {
@@ -36,6 +42,69 @@ export async function answerQuestion(evidence: EvidenceBundle): Promise<AskResul
     const message = error instanceof Error ? error.message : String(error);
     return fallbackAnswer(evidence, `AI synthesis unavailable: ${message}`);
   }
+}
+
+export async function answerQuestionStream(
+  evidence: EvidenceBundle,
+  onEvent: (event: AskStreamEvent) => void | Promise<void>
+): Promise<AskResult> {
+  if (!process.env.OPENAI_API_KEY) {
+    const result = fallbackAnswer(evidence, "AI synthesis unavailable: OPENAI_API_KEY is not set.");
+    await onEvent({ type: "status", message: "OpenAI key missing; using deterministic graph fallback." });
+    await onEvent({ type: "result", result });
+    return result;
+  }
+
+  const model = process.env.OPENAI_MODEL ?? "gpt-5.2";
+  try {
+    const client = new OpenAI();
+    const stream = client.responses.stream({
+      model,
+      instructions: askInstructions(),
+      input: JSON.stringify(toCompactEvidence(evidence), null, 2)
+    });
+    let answer = "";
+    await onEvent({ type: "status", message: "Streaming OpenAI synthesis from graph evidence." });
+    for await (const event of stream) {
+      if (isTextDelta(event)) {
+        answer += event.delta;
+        await onEvent({ type: "delta", delta: event.delta });
+      }
+      if (event.type === "error") {
+        throw new Error(event.message);
+      }
+      if (event.type === "response.failed") {
+        throw new Error(event.response.error?.message ?? "OpenAI response failed.");
+      }
+    }
+    const result = {
+      answer: answer.trim() || deterministicText(evidence),
+      mode: "openai" as const,
+      model,
+      evidence
+    };
+    await onEvent({ type: "result", result });
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const result = fallbackAnswer(evidence, `AI synthesis unavailable: ${message}`);
+    await onEvent({ type: "status", message: "OpenAI streaming failed; using deterministic graph fallback." });
+    await onEvent({ type: "result", result });
+    return result;
+  }
+}
+
+function askInstructions(): string {
+  return [
+    "You are ContextOS, an enterprise codebase assistant. Answer only from the provided evidence.",
+    "Graph nodes, edges, repositories, and suggested files are authoritative.",
+    "Generated docs, when present, may be used for explanatory context and onboarding wording, but do not override graph facts.",
+    "Be concise, name impacted services, endpoints, tables, topics, and files. If evidence is incomplete, say what is missing."
+  ].join(" ");
+}
+
+function isTextDelta(event: ResponseStreamEvent): event is ResponseStreamEvent & { type: "response.output_text.delta"; delta: string } {
+  return event.type === "response.output_text.delta";
 }
 
 export async function generateRepositoryDocumentation(evidence: RepositoryDocEvidence): Promise<RepositoryDoc> {
@@ -150,7 +219,9 @@ function deterministicText(evidence: EvidenceBundle): string {
     tables.length ? `Tables: ${tables.join(", ")}` : "No tables matched.",
     topics.length ? `Kafka topics: ${topics.join(", ")}` : "No topics matched.",
     files.length ? `Suggested files: ${files.join(", ")}` : "No source files matched.",
-    docs.length ? `Generated docs used: ${docs.map((doc) => `${doc.kind}:${doc.name} (${doc.repoName})`).join(", ")}` : "Generated docs used: none.",
+    docs.length
+      ? `Generated docs used: ${docs.map((doc) => `${doc.kind}:${doc.name} (${doc.repoName})`).join(", ")}`
+      : "Generated docs used: none.",
     "Implementation risk: review matched service logic first, then validate downstream endpoint, database, and messaging impacts."
   ].join("\n");
 }
@@ -187,9 +258,7 @@ function fallbackRepositoryDoc(evidence: RepositoryDocEvidence, mode: Repository
   const topics = uniqueNodes(evidence.nodes.filter((node) => node.kind === "Topic"));
   const configs = evidence.nodes.filter((node) => node.kind === "Config");
   const files = evidence.nodes.filter((node) => node.kind === "File");
-  const feignTargets = services
-    .map((node) => node.metadata?.target)
-    .filter((target): target is string => typeof target === "string");
+  const feignTargets = services.map((node) => node.metadata?.target).filter((target): target is string => typeof target === "string");
   const summary = buildSummary(repo.name, endpoints, internalServices, tables, topics);
   const markdown = [
     `# ${repo.name}`,
@@ -200,7 +269,9 @@ function fallbackRepositoryDoc(evidence: RepositoryDocEvidence, mode: Repository
     "## Business Functionality",
     internalServices.length
       ? bulletList(
-          internalServices.map((node) => `${node.name}${node.metadata?.stereotype ? ` (${node.metadata.stereotype})` : ""}${keywordsText(node)}`)
+          internalServices.map(
+            (node) => `${node.name}${node.metadata?.stereotype ? ` (${node.metadata.stereotype})` : ""}${keywordsText(node)}`
+          )
         )
       : "No business service classes were detected.",
     "",
@@ -214,28 +285,22 @@ function fallbackRepositoryDoc(evidence: RepositoryDocEvidence, mode: Repository
     "",
     "## Data Model",
     [...entities, ...tables].length
-      ? bulletList([
-          ...entities.map((node) => `Entity: ${fileLine(node)}`),
-          ...tables.map((node) => `Table: ${fileLine(node)}`)
-        ])
+      ? bulletList([...entities.map((node) => `Entity: ${fileLine(node)}`), ...tables.map((node) => `Table: ${fileLine(node)}`)])
       : "No entities or database tables were detected.",
     "",
     "## Messaging",
-    topics.length ? bulletList(topics.map((node) => `${node.name} (${node.filePath ?? "source file unavailable"})`)) : "No Kafka topics were detected.",
+    topics.length
+      ? bulletList(topics.map((node) => `${node.name} (${node.filePath ?? "source file unavailable"})`))
+      : "No Kafka topics were detected.",
     "",
     "## External Dependencies",
-    feignTargets.length ? bulletList([...new Set(feignTargets)].map((target) => `Calls ${target} via Feign client`)) : "No Feign clients or external service calls were detected.",
+    feignTargets.length
+      ? bulletList([...new Set(feignTargets)].map((target) => `Calls ${target} via Feign client`))
+      : "No Feign clients or external service calls were detected.",
     "",
     "## Key Files",
     bulletList(
-      unique([
-        ...configs,
-        ...files
-      ]
-        .map((node) => node.filePath)
-        .filter((filePath): filePath is string => Boolean(filePath))
-      )
-        .slice(0, 12)
+      unique([...configs, ...files].map((node) => node.filePath).filter((filePath): filePath is string => Boolean(filePath))).slice(0, 12)
     ),
     "",
     "## New Joiner Reading Path",
@@ -291,7 +356,11 @@ function fallbackGraphItemDoc(evidence: GraphItemDocEvidence, mode: GraphItemDoc
           node.filePath ?? "Source file unavailable.",
           "",
           "## How To Test or Trace",
-          bulletList([`Start at ${node.name}.`, node.filePath ? `Open ${node.filePath}.` : "", "Follow service calls, table usage, and messaging topics listed above."])
+          bulletList([
+            `Start at ${node.name}.`,
+            node.filePath ? `Open ${node.filePath}.` : "",
+            "Follow service calls, table usage, and messaging topics listed above."
+          ])
         ].join("\n")
       : [
           `# ${node.name}`,
@@ -315,7 +384,11 @@ function fallbackGraphItemDoc(evidence: GraphItemDocEvidence, mode: GraphItemDoc
           node.filePath ?? "Source file unavailable.",
           "",
           "## How To Read This Service",
-          bulletList([node.filePath ? `Open ${node.filePath}.` : "", "Identify public methods and injected dependencies.", "Trace related APIs, tables, and topics from the sections above."])
+          bulletList([
+            node.filePath ? `Open ${node.filePath}.` : "",
+            "Identify public methods and injected dependencies.",
+            "Trace related APIs, tables, and topics from the sections above."
+          ])
         ].join("\n");
 
   return {
@@ -379,21 +452,21 @@ function endpointSequenceDiagram(endpoint: GraphNode, services: GraphNode[], tab
   }
   if (repository) {
     lines.push(`  participant Repository as ${sanitizeMermaidLabel(repository.name)}`);
-    lines.push(`  ${(service ? "Service" : "Controller")}->>Repository: load or persist data`);
+    lines.push(`  ${service ? "Service" : "Controller"}->>Repository: load or persist data`);
   }
   if (table) {
     lines.push(`  participant DB as ${sanitizeMermaidLabel(table.name)}`);
-    lines.push(`  ${(repository ? "Repository" : service ? "Service" : "Controller")}->>DB: read/write`);
+    lines.push(`  ${repository ? "Repository" : service ? "Service" : "Controller"}->>DB: read/write`);
   }
   if (client) {
     lines.push(`  participant Client as ${sanitizeMermaidLabel(client.name)}`);
-    lines.push(`  ${(service ? "Service" : "Controller")}->>Client: call downstream service`);
+    lines.push(`  ${service ? "Service" : "Controller"}->>Client: call downstream service`);
   }
   if (topic) {
     lines.push(`  participant Topic as ${sanitizeMermaidLabel(topic.name)}`);
-    lines.push(`  ${(service ? "Service" : "Controller")}-->>Topic: publish or consume event`);
+    lines.push(`  ${service ? "Service" : "Controller"}-->>Topic: publish or consume event`);
   }
-  lines.push(`  ${(service ? "Service" : "Controller")}-->>Controller: result`);
+  lines.push(`  ${service ? "Service" : "Controller"}-->>Controller: result`);
   lines.push("  Controller-->>User: response");
   lines.push("```");
   return lines.join("\n");

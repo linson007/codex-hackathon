@@ -3,6 +3,19 @@ import { createRoot } from "react-dom/client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
+import {
+  Background,
+  Controls,
+  Handle,
+  MiniMap,
+  Position,
+  ReactFlow,
+  type Edge as FlowEdge,
+  type Node as FlowNode,
+  type NodeProps
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import "./theme.css";
 import "./styles.css";
 
 type Node = { id: string; kind: string; name: string; repo: string; filePath?: string; metadata?: Record<string, unknown> };
@@ -78,8 +91,11 @@ type AskResult = {
   evidence: { nodes: Node[]; edges: Edge[]; suggestedFiles: string[]; docs?: Array<{ kind: string; name: string; repoName: string }> };
 };
 type GraphCategory = "Controller" | "Service" | "Client" | "Repository" | "Endpoint" | "Topic" | "Table" | "External";
-type GraphViewNode = Node & { x: number; y: number; category: GraphCategory };
+type GraphNodeData = { label: string; sublabel: string; category: GraphCategory };
+type GraphViewNode = FlowNode<GraphNodeData, "graphNode">;
 type DocVariant = "llm" | "deterministic";
+type ThemeMode = "light" | "dark";
+const graphNodeTypes = { graphNode: GraphNodeCard };
 
 const apiBase = import.meta.env.VITE_CONTEXTOS_API ?? "http://localhost:4317";
 mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base" });
@@ -96,11 +112,19 @@ function App() {
   const [itemDoc, setItemDoc] = useState<ItemDoc | null>(null);
   const [docVariant, setDocVariant] = useState<DocVariant>("llm");
   const [askIncludeDocs, setAskIncludeDocs] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem("contextos-theme") === "dark" ? "dark" : "light"));
   const [question, setQuestion] = useState("What is impacted if I change refund eligibility logic?");
   const [answer, setAnswer] = useState<AskResult | null>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState("");
+  const [askStatus, setAskStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [docLoading, setDocLoading] = useState(false);
   const [itemDocLoading, setItemDocLoading] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    localStorage.setItem("contextos-theme", themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     fetch(`${apiBase}/api/kbs`)
@@ -120,6 +144,8 @@ function App() {
       return;
     }
     setAnswer(null);
+    setStreamingAnswer("");
+    setAskStatus("");
     Promise.all([
       fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}`).then((res) => res.json()),
       fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos`).then((res) => res.json())
@@ -144,12 +170,16 @@ function App() {
     setDocLoading(true);
     Promise.all([
       fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos/${encodeURIComponent(selectedRepo)}/doc`),
-      fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos/${encodeURIComponent(selectedRepo)}/doc-items`).then((res) => res.json())
+      fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos/${encodeURIComponent(selectedRepo)}/doc-items`).then((res) =>
+        res.json()
+      )
     ])
       .then(async ([docResponse, itemsPayload]: [Response, { items: ItemDocSummary[] }]) => {
         setRepoDoc(docResponse.ok ? await docResponse.json() : null);
         setDocItems(itemsPayload.items);
-        setSelectedItemId((current) => (itemsPayload.items.some((item) => item.nodeId === current) ? current : itemsPayload.items[0]?.nodeId || ""));
+        setSelectedItemId((current) =>
+          itemsPayload.items.some((item) => item.nodeId === current) ? current : itemsPayload.items[0]?.nodeId || ""
+        );
       })
       .catch(console.error)
       .finally(() => setDocLoading(false));
@@ -176,7 +206,10 @@ function App() {
   const tables = useMemo(() => summary?.nodes.filter((node) => node.kind === "Table") ?? [], [summary]);
   const topics = useMemo(() => summary?.nodes.filter((node) => node.kind === "Topic") ?? [], [summary]);
   const serviceDocItems = useMemo(() => docItems.filter((item) => item.nodeKind === "Service"), [docItems]);
-  const controllerDocItems = useMemo(() => serviceDocItems.filter((item) => item.metadata?.stereotype === "RestController"), [serviceDocItems]);
+  const controllerDocItems = useMemo(
+    () => serviceDocItems.filter((item) => item.metadata?.stereotype === "RestController"),
+    [serviceDocItems]
+  );
   const clientDocItems = useMemo(() => serviceDocItems.filter((item) => item.metadata?.stereotype === "FeignClient"), [serviceDocItems]);
   const repositoryDocItems = useMemo(() => serviceDocItems.filter((item) => item.metadata?.stereotype === "Repository"), [serviceDocItems]);
   const businessServiceDocItems = useMemo(
@@ -197,13 +230,44 @@ function App() {
 
   async function ask() {
     setLoading(true);
+    setAnswer(null);
+    setStreamingAnswer("");
+    setAskStatus("Retrieving graph evidence...");
     try {
-      const res = await fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/ask`, {
+      const res = await fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/ask/stream`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question, includeDocs: askIncludeDocs })
       });
-      setAnswer(await res.json());
+      if (!res.ok || !res.body) {
+        const payload = await res.json();
+        setAnswer({
+          answer: payload.error ?? "Ask failed.",
+          mode: "fallback",
+          evidence: { nodes: [], edges: [], suggestedFiles: [] }
+        });
+        return;
+      }
+      await readServerEvents(res.body, (event, payload) => {
+        if (event === "status" && typeof payload.message === "string") {
+          setAskStatus(payload.message);
+        }
+        if (event === "delta" && typeof payload.delta === "string") {
+          setStreamingAnswer((current) => `${current}${payload.delta}`);
+        }
+        if (event === "result" && payload.result) {
+          setAnswer(payload.result as AskResult);
+          setStreamingAnswer((payload.result as AskResult).answer);
+          setAskStatus("Answer ready.");
+        }
+        if (event === "error" && typeof payload.error === "string") {
+          setAnswer({
+            answer: payload.error,
+            mode: "fallback",
+            evidence: { nodes: [], edges: [], suggestedFiles: [] }
+          });
+        }
+      });
     } finally {
       setLoading(false);
     }
@@ -213,9 +277,12 @@ function App() {
     if (!selectedKb || !selectedRepo) return;
     setDocLoading(true);
     try {
-      const res = await fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos/${encodeURIComponent(selectedRepo)}/doc/regenerate`, {
-        method: "POST"
-      });
+      const res = await fetch(
+        `${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos/${encodeURIComponent(selectedRepo)}/doc/regenerate`,
+        {
+          method: "POST"
+        }
+      );
       setRepoDoc(await res.json());
       const repoPayload = await fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos`).then((response) => response.json());
       setRepoOverviews(repoPayload.repositories);
@@ -228,11 +295,16 @@ function App() {
     if (!selectedKb || !selectedItemId || !selectedRepo) return;
     setItemDocLoading(true);
     try {
-      const res = await fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/doc-items/${encodeURIComponent(selectedItemId)}/regenerate`, {
-        method: "POST"
-      });
+      const res = await fetch(
+        `${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/doc-items/${encodeURIComponent(selectedItemId)}/regenerate`,
+        {
+          method: "POST"
+        }
+      );
       setItemDoc(await res.json());
-      const itemsPayload = await fetch(`${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos/${encodeURIComponent(selectedRepo)}/doc-items`).then((response) => response.json());
+      const itemsPayload = await fetch(
+        `${apiBase}/api/kbs/${encodeURIComponent(selectedKb)}/repos/${encodeURIComponent(selectedRepo)}/doc-items`
+      ).then((response) => response.json());
       setDocItems(itemsPayload.items);
     } finally {
       setItemDocLoading(false);
@@ -246,14 +318,25 @@ function App() {
           <h1>ContextOS</h1>
           <p>AI knowledge graph for enterprise microservices</p>
         </div>
-        <div className="status">{summary ? `${summary.name}: ${summary.nodes.length} nodes / ${summary.edges.length} edges` : "Loading knowledge bases"}</div>
+        <div className="headerActions">
+          <button
+            className="themeToggle"
+            aria-label={`Switch to ${themeMode === "dark" ? "light" : "dark"} mode`}
+            onClick={() => setThemeMode((current) => (current === "dark" ? "light" : "dark"))}
+          >
+            {themeMode === "dark" ? "Light" : "Dark"}
+          </button>
+          <div className="status">
+            {summary ? `${summary.name}: ${summary.nodes.length} nodes / ${summary.edges.length} edges` : "Loading knowledge bases"}
+          </div>
+        </div>
       </header>
 
       <section className="workspace">
         <div className="ask">
           <div className="kbPicker">
             <label htmlFor="kb">Knowledge base</label>
-            <select id="kb" value={selectedKb} onChange={(event) => setSelectedKb(event.target.value)}>
+            <select id="kb" value={selectedKb} aria-label="Knowledge base" onChange={(event) => setSelectedKb(event.target.value)}>
               {knowledgeBases.map((kb) => (
                 <option key={kb.name} value={kb.name}>
                   {kb.name} ({kb.repositoryCount} repos, {kb.nodeCount} nodes)
@@ -262,26 +345,58 @@ function App() {
             </select>
           </div>
           <div className="query">
-            <input value={question} onChange={(event) => setQuestion(event.target.value)} />
-            <button onClick={ask} disabled={loading || !selectedKb}>{loading ? "Asking..." : "Ask"}</button>
+            <input aria-label="Ask ContextOS question" value={question} onChange={(event) => setQuestion(event.target.value)} />
+            <button aria-label="Ask ContextOS" onClick={ask} disabled={loading || !selectedKb}>
+              {loading ? "Streaming..." : "Ask"}
+            </button>
           </div>
+          {(loading || askStatus) && (
+            <div className="askStatus" role="status" aria-live="polite">
+              <span className={loading ? "pulseDot active" : "pulseDot"} />
+              {askStatus || "Preparing answer..."}
+            </div>
+          )}
           <div className="askMode">
             <span>Evidence</span>
             <div className="docToggle" aria-label="Ask evidence mode">
-              <button className={!askIncludeDocs ? "active" : ""} onClick={() => setAskIncludeDocs(false)}>Graph</button>
-              <button className={askIncludeDocs ? "active" : ""} onClick={() => setAskIncludeDocs(true)}>Graph + Docs</button>
+              <button aria-pressed={!askIncludeDocs} className={!askIncludeDocs ? "active" : ""} onClick={() => setAskIncludeDocs(false)}>
+                Graph
+              </button>
+              <button aria-pressed={askIncludeDocs} className={askIncludeDocs ? "active" : ""} onClick={() => setAskIncludeDocs(true)}>
+                Graph + Docs
+              </button>
             </div>
           </div>
-          <AnswerPanel text={answer?.answer} emptyText={selectedKb ? "Ask a question to inspect impact across services, endpoints, tables, topics, and files." : "Create or index a knowledge base to begin."} />
-          {answer && <div className="mode">mode={answer.mode}{answer.model ? ` model=${answer.model}` : ""} evidence={askIncludeDocs ? `graph+docs (${answer.evidence.docs?.length ?? 0})` : "graph"}</div>}
+          <AnswerPanel
+            text={streamingAnswer || answer?.answer}
+            emptyText={
+              selectedKb
+                ? "Ask a question to inspect impact across services, endpoints, tables, topics, and files."
+                : "Create or index a knowledge base to begin."
+            }
+          />
+          {answer && (
+            <div className="mode">
+              mode={answer.mode}
+              {answer.model ? ` model=${answer.model}` : ""} evidence=
+              {askIncludeDocs ? `graph+docs (${answer.evidence.docs?.length ?? 0})` : "graph"}
+            </div>
+          )}
         </div>
 
         <aside>
           <h2>Knowledge Bases</h2>
           {knowledgeBases.map((kb) => (
-            <button className={kb.name === selectedKb ? "kbRow active" : "kbRow"} key={kb.name} onClick={() => setSelectedKb(kb.name)}>
+            <button
+              aria-pressed={kb.name === selectedKb}
+              className={kb.name === selectedKb ? "kbRow active" : "kbRow"}
+              key={kb.name}
+              onClick={() => setSelectedKb(kb.name)}
+            >
               <strong>{kb.name}</strong>
-              <span>{kb.repositoryCount} repos / {kb.nodeCount} nodes</span>
+              <span>
+                {kb.repositoryCount} repos / {kb.nodeCount} nodes
+              </span>
             </button>
           ))}
 
@@ -312,7 +427,12 @@ function App() {
             <span>{repoOverviews.length} repos</span>
           </div>
           {repoOverviews.map((repo) => (
-            <button className={repo.name === selectedRepo ? "repoCard active" : "repoCard"} key={repo.id} onClick={() => setSelectedRepo(repo.name)}>
+            <button
+              aria-pressed={repo.name === selectedRepo}
+              className={repo.name === selectedRepo ? "repoCard active" : "repoCard"}
+              key={repo.id}
+              onClick={() => setSelectedRepo(repo.name)}
+            >
               <strong>{repo.name}</strong>
               <span>{summaryPreview(repo.docSummary)}</span>
               <small>
@@ -331,13 +451,18 @@ function App() {
             </div>
             <div className="docActions">
               <DocVariantToggle value={docVariant} onChange={setDocVariant} doc={repoDoc} />
-              <button onClick={regenerateDoc} disabled={!selectedRepo || docLoading}>{docLoading ? "Generating..." : repoDoc ? "Regenerate" : "Generate"}</button>
+              <button aria-label="Regenerate repository documentation" onClick={regenerateDoc} disabled={!selectedRepo || docLoading}>
+                {docLoading ? "Generating..." : repoDoc ? "Regenerate" : "Generate"}
+              </button>
             </div>
           </div>
           {docLoading ? (
             <div className="answer empty">Generating repository documentation...</div>
           ) : (
-            <AnswerPanel text={docMarkdown(repoDoc, docVariant)} emptyText="Generate docs to create a new-joiner overview for this repository." />
+            <AnswerPanel
+              text={docMarkdown(repoDoc, docVariant)}
+              emptyText="Generate docs to create a new-joiner overview for this repository."
+            />
           )}
         </div>
       </section>
@@ -346,11 +471,17 @@ function App() {
         <div className="repoDocsList compactDocsList">
           <div className="sectionTitle">
             <h2>Controllers</h2>
-            <span>{controllerDocItems.length} / {endpointDocItems.length} APIs</span>
+            <span>
+              {controllerDocItems.length} / {endpointDocItems.length} APIs
+            </span>
           </div>
           {controllerEndpointGroups.map(({ controller, endpoints }) => (
             <div className="serviceGroup" key={controller.nodeId}>
-              <button className={controller.nodeId === selectedItemId ? "repoCard active" : "repoCard"} onClick={() => setSelectedItemId(controller.nodeId)}>
+              <button
+                aria-pressed={controller.nodeId === selectedItemId}
+                className={controller.nodeId === selectedItemId ? "repoCard active" : "repoCard"}
+                onClick={() => setSelectedItemId(controller.nodeId)}
+              >
                 <strong>{controller.nodeName}</strong>
                 <span>{summaryPreview(controller.docSummary)}</span>
                 <small>{controller.docStale ? "stale docs" : `${endpoints.length} endpoints`}</small>
@@ -358,7 +489,12 @@ function App() {
               {endpoints.length > 0 && (
                 <div className="endpointChildren">
                   {endpoints.map((endpoint) => (
-                    <button className={endpoint.nodeId === selectedItemId ? "endpointLink active" : "endpointLink"} key={endpoint.nodeId} onClick={() => setSelectedItemId(endpoint.nodeId)}>
+                    <button
+                      aria-pressed={endpoint.nodeId === selectedItemId}
+                      className={endpoint.nodeId === selectedItemId ? "endpointLink active" : "endpointLink"}
+                      key={endpoint.nodeId}
+                      onClick={() => setSelectedItemId(endpoint.nodeId)}
+                    >
                       <strong>{endpoint.nodeName}</strong>
                       <span>{endpoint.docStale ? "stale docs" : "endpoint doc"}</span>
                     </button>
@@ -374,7 +510,12 @@ function App() {
               <span>{businessServiceDocItems.length}</span>
             </div>
             {businessServiceDocItems.map((service) => (
-              <button className={service.nodeId === selectedItemId ? "repoCard active" : "repoCard"} key={service.nodeId} onClick={() => setSelectedItemId(service.nodeId)}>
+              <button
+                aria-pressed={service.nodeId === selectedItemId}
+                className={service.nodeId === selectedItemId ? "repoCard active" : "repoCard"}
+                key={service.nodeId}
+                onClick={() => setSelectedItemId(service.nodeId)}
+              >
                 <strong>{service.nodeName}</strong>
                 <span>{summaryPreview(service.docSummary)}</span>
                 <small>{service.docStale ? "stale docs" : "service doc"}</small>
@@ -388,7 +529,12 @@ function App() {
               <span>{clientDocItems.length}</span>
             </div>
             {clientDocItems.map((client) => (
-              <button className={client.nodeId === selectedItemId ? "repoCard active" : "repoCard"} key={client.nodeId} onClick={() => setSelectedItemId(client.nodeId)}>
+              <button
+                aria-pressed={client.nodeId === selectedItemId}
+                className={client.nodeId === selectedItemId ? "repoCard active" : "repoCard"}
+                key={client.nodeId}
+                onClick={() => setSelectedItemId(client.nodeId)}
+              >
                 <strong>{client.nodeName}</strong>
                 <span>{summaryPreview(client.docSummary)}</span>
                 <small>{client.metadata?.target ? `calls ${String(client.metadata.target)}` : "client doc"}</small>
@@ -402,7 +548,12 @@ function App() {
               <span>{repositoryDocItems.length}</span>
             </div>
             {repositoryDocItems.map((repository) => (
-              <button className={repository.nodeId === selectedItemId ? "repoCard active" : "repoCard"} key={repository.nodeId} onClick={() => setSelectedItemId(repository.nodeId)}>
+              <button
+                aria-pressed={repository.nodeId === selectedItemId}
+                className={repository.nodeId === selectedItemId ? "repoCard active" : "repoCard"}
+                key={repository.nodeId}
+                onClick={() => setSelectedItemId(repository.nodeId)}
+              >
                 <strong>{repository.nodeName}</strong>
                 <span>{summaryPreview(repository.docSummary)}</span>
                 <small>{repository.docStale ? "stale docs" : "repository doc"}</small>
@@ -414,18 +565,31 @@ function App() {
         <div className="repoDocDetail">
           <div className="docHeader">
             <div>
-              <h2>{itemDoc?.nodeName || docItems.find((item) => item.nodeId === selectedItemId)?.nodeName || "Select a service or endpoint"}</h2>
-              <span>{itemDoc ? `${itemDoc.nodeKind} doc: ${docStatus(itemDoc, docVariant)}` : "No generated service/endpoint doc yet"}</span>
+              <h2>
+                {itemDoc?.nodeName || docItems.find((item) => item.nodeId === selectedItemId)?.nodeName || "Select a service or endpoint"}
+              </h2>
+              <span>
+                {itemDoc ? `${itemDoc.nodeKind} doc: ${docStatus(itemDoc, docVariant)}` : "No generated service/endpoint doc yet"}
+              </span>
             </div>
             <div className="docActions">
               <DocVariantToggle value={docVariant} onChange={setDocVariant} doc={itemDoc} />
-              <button onClick={regenerateItemDoc} disabled={!selectedItemId || itemDocLoading}>{itemDocLoading ? "Generating..." : itemDoc ? "Regenerate" : "Generate"}</button>
+              <button
+                aria-label="Regenerate selected service or endpoint documentation"
+                onClick={regenerateItemDoc}
+                disabled={!selectedItemId || itemDocLoading}
+              >
+                {itemDocLoading ? "Generating..." : itemDoc ? "Regenerate" : "Generate"}
+              </button>
             </div>
           </div>
           {itemDocLoading ? (
             <div className="answer empty">Generating service or endpoint documentation...</div>
           ) : (
-            <AnswerPanel text={docMarkdown(itemDoc, docVariant)} emptyText="Generate docs to create a focused service or endpoint overview." />
+            <AnswerPanel
+              text={docMarkdown(itemDoc, docVariant)}
+              emptyText="Generate docs to create a focused service or endpoint overview."
+            />
           )}
         </div>
       </section>
@@ -441,14 +605,27 @@ function App() {
   );
 }
 
-function DocVariantToggle({ value, onChange, doc }: { value: DocVariant; onChange: (value: DocVariant) => void; doc: RepoDoc | ItemDoc | null }) {
+function DocVariantToggle({
+  value,
+  onChange,
+  doc
+}: {
+  value: DocVariant;
+  onChange: (value: DocVariant) => void;
+  doc: RepoDoc | ItemDoc | null;
+}) {
   const hasLlm = Boolean(doc?.llmMarkdown);
   return (
     <div className="docToggle" aria-label="Documentation variant">
-      <button className={value === "llm" ? "active" : ""} onClick={() => onChange("llm")} disabled={!hasLlm}>
+      <button aria-pressed={value === "llm"} className={value === "llm" ? "active" : ""} onClick={() => onChange("llm")} disabled={!hasLlm}>
         LLM
       </button>
-      <button className={value === "deterministic" ? "active" : ""} onClick={() => onChange("deterministic")} disabled={!doc}>
+      <button
+        aria-pressed={value === "deterministic"}
+        className={value === "deterministic" ? "active" : ""}
+        onClick={() => onChange("deterministic")}
+        disabled={!doc}
+      >
         Facts
       </button>
     </div>
@@ -475,6 +652,48 @@ function docStatus(doc: RepoDoc | ItemDoc, variant: DocVariant): string {
   return `LLM docs not generated; showing deterministic facts from ${new Date(generatedAt).toLocaleString()}`;
 }
 
+async function readServerEvents(
+  stream: ReadableStream<Uint8Array>,
+  onEvent: (event: string, payload: Record<string, unknown>) => void
+): Promise<void> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+    for (const rawEvent of events) {
+      const parsed = parseServerEvent(rawEvent);
+      if (parsed) onEvent(parsed.event, parsed.payload);
+    }
+  }
+  buffer += decoder.decode();
+  const parsed = parseServerEvent(buffer);
+  if (parsed) onEvent(parsed.event, parsed.payload);
+}
+
+function parseServerEvent(rawEvent: string): { event: string; payload: Record<string, unknown> } | null {
+  const event = rawEvent
+    .split("\n")
+    .find((line) => line.startsWith("event:"))
+    ?.slice("event:".length)
+    .trim();
+  const data = rawEvent
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trim())
+    .join("\n");
+  if (!event || !data) return null;
+  try {
+    return { event, payload: JSON.parse(data) as Record<string, unknown> };
+  } catch {
+    return null;
+  }
+}
+
 function summaryPreview(value?: string): string {
   if (!value) return "Documentation not generated yet.";
   return value
@@ -499,40 +718,40 @@ function DependencyGraph({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
   }
   return (
     <div className="graphCanvas">
-      <svg className="edgeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" fill="#7b8d76" />
-          </marker>
-        </defs>
-        {graph.edges.map((edge) => {
-          const from = graph.nodeMap.get(edge.fromId);
-          const to = graph.nodeMap.get(edge.toId);
-          if (!from || !to) return null;
-          return (
-            <g key={edge.id}>
-              <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} className={`edgeLine edge-${edge.kind}`} markerEnd="url(#arrow)" />
-              <text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 1} className="edgeLabel">
-                {edge.kind}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      {graph.nodes.map((node) => (
-        <div className={`graphNode ${node.category.toLowerCase()}`} style={{ left: `${node.x}%`, top: `${node.y}%` }} key={node.id}>
-          <strong>{node.name}</strong>
-          <span>{node.category} / {node.repo}</span>
-        </div>
-      ))}
+      <ReactFlow
+        nodes={graph.nodes}
+        edges={graph.edges}
+        nodeTypes={graphNodeTypes}
+        fitView
+        nodesDraggable={false}
+        aria-label="Dependency graph"
+      >
+        <Background />
+        <Controls aria-label="Dependency graph controls" />
+        <MiniMap pannable zoomable />
+      </ReactFlow>
       <div className="graphLegend">
-        <span><i className="controllerDot" /> Controller</span>
-        <span><i className="serviceDot" /> Service</span>
-        <span><i className="clientDot" /> Client</span>
-        <span><i className="repositoryDot" /> Repository</span>
-        <span><i className="endpointDot" /> Endpoint</span>
-        <span><i className="topicDot" /> Topic</span>
-        <span><i className="tableDot" /> Table</span>
+        <span>
+          <i className="controllerDot" /> Controller
+        </span>
+        <span>
+          <i className="serviceDot" /> Service
+        </span>
+        <span>
+          <i className="clientDot" /> Client
+        </span>
+        <span>
+          <i className="repositoryDot" /> Repository
+        </span>
+        <span>
+          <i className="endpointDot" /> Endpoint
+        </span>
+        <span>
+          <i className="topicDot" /> Topic
+        </span>
+        <span>
+          <i className="tableDot" /> Table
+        </span>
       </div>
     </div>
   );
@@ -553,28 +772,59 @@ function buildDependencyGraph(nodes: Node[], edges: Edge[]) {
     return ["Controller", "Client", "Repository"].includes(category) || (category === "Service" && node.metadata?.stereotype === "Service");
   });
   const byKind = [
-    { category: "Controller" as const, x: 10 },
-    { category: "Endpoint" as const, x: 26 },
-    { category: "Service" as const, x: 42 },
-    { category: "Client" as const, x: 58 },
-    { category: "External" as const, x: 72 },
-    { category: "Topic" as const, x: 84 },
-    { category: "Table" as const, x: 94 }
+    { category: "Controller" as const, x: 0 },
+    { category: "Endpoint" as const, x: 250 },
+    { category: "Service" as const, x: 500 },
+    { category: "Client" as const, x: 750 },
+    { category: "External" as const, x: 1000 },
+    { category: "Topic" as const, x: 1250 },
+    { category: "Table" as const, x: 1500 }
   ];
   const graphNodes: GraphViewNode[] = [];
   for (const group of byKind) {
     const groupNodes = candidates.filter((node) => classifyNode(node) === group.category).slice(0, 10);
-    const step = 76 / Math.max(1, groupNodes.length);
+    const step = 95;
     groupNodes.forEach((node, index) => {
-      graphNodes.push({ ...node, category: group.category, x: group.x, y: 12 + step * index + step / 2 });
+      graphNodes.push({
+        id: node.id,
+        type: "graphNode",
+        position: { x: group.x, y: 20 + step * index },
+        data: { label: node.name, sublabel: `${group.category} / ${node.repo}`, category: group.category },
+        className: `flowNode ${group.category.toLowerCase()}`,
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left
+      });
     });
   }
   const nodeMap = new Map(graphNodes.map((node) => [node.id, node]));
   return {
     nodes: graphNodes,
-    edges: visibleEdges.filter((edge) => nodeMap.has(edge.fromId) && nodeMap.has(edge.toId)).slice(0, 40),
+    edges: visibleEdges
+      .filter((edge) => nodeMap.has(edge.fromId) && nodeMap.has(edge.toId))
+      .slice(0, 40)
+      .map(
+        (edge): FlowEdge => ({
+          id: edge.id,
+          source: edge.fromId,
+          target: edge.toId,
+          label: edge.kind,
+          className: `flowEdge edge-${edge.kind}`,
+          animated: edge.kind === "calls" || edge.kind === "consumes"
+        })
+      ),
     nodeMap
   };
+}
+
+function GraphNodeCard({ data }: NodeProps<GraphViewNode>) {
+  return (
+    <div className={`graphNodeCard ${data.category.toLowerCase()}`}>
+      <Handle type="target" position={Position.Left} />
+      <strong>{data.label}</strong>
+      <span>{data.sublabel}</span>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
 }
 
 function classifyNode(node: Node): GraphCategory {
@@ -594,7 +844,9 @@ function AnswerPanel({ text, emptyText }: { text?: string; emptyText: string }) 
   }
   return (
     <div className="answer">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: MarkdownCode }}>{text}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code: MarkdownCode }}>
+        {text}
+      </ReactMarkdown>
     </div>
   );
 }

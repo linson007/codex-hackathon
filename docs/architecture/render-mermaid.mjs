@@ -8,14 +8,9 @@ const diagramsDir = join(root, "docs", "architecture", "diagrams");
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const mermaidScript = join(root, "node_modules", "mermaid", "dist", "mermaid.min.js");
 const files = process.argv.slice(2);
-const inputs = files.length ? files : [
-  "component-diagram.mmd",
-  "update-flow.mmd",
-  "docs-generation-flow.mmd",
-  "ask-flow.mmd",
-  "ask-with-docs-flow.mmd",
-  "ui-flow.mmd"
-];
+const inputs = files.length
+  ? files
+  : ["component-diagram.mmd", "update-flow.mmd", "docs-generation-flow.mmd", "ask-flow.mmd", "ask-with-docs-flow.mmd", "ui-flow.mmd"];
 
 for (const file of inputs) {
   const inputPath = join(diagramsDir, file);
@@ -78,8 +73,5 @@ function extractSvg(html) {
 }
 
 function escapeHtml(value) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

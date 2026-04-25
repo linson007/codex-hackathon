@@ -3,15 +3,9 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-export type NodeKind =
-  | "Repository"
-  | "Service"
-  | "Endpoint"
-  | "Entity"
-  | "Topic"
-  | "Table"
-  | "Config"
-  | "File";
+export const CURRENT_SCHEMA_VERSION = 1;
+
+export type NodeKind = "Repository" | "Service" | "Endpoint" | "Entity" | "Topic" | "Table" | "Config" | "File";
 
 export type GraphNode = {
   id: string;
@@ -172,7 +166,10 @@ export class ContextStore {
   readonly dbPath: string;
   private db: Database.Database;
 
-  constructor(readonly name: string, readonly root: string) {
+  constructor(
+    readonly name: string,
+    readonly root: string
+  ) {
     this.dbPath = join(root, "contextos.db");
     mkdirSync(dirname(this.dbPath), { recursive: true });
     this.db = new Database(this.dbPath);
@@ -239,15 +236,11 @@ export class ContextStore {
     const tx = this.db.transaction(() => {
       this.db.prepare("delete from edges where repo = ?").run(repo.name);
       this.db.prepare("delete from nodes where repo = ?").run(repo.name);
-      const insertNode = this.db.prepare(
-        "insert into nodes (id, kind, name, repo, file_path, metadata) values (?, ?, ?, ?, ?, ?)"
-      );
+      const insertNode = this.db.prepare("insert into nodes (id, kind, name, repo, file_path, metadata) values (?, ?, ?, ?, ?, ?)");
       for (const node of nodes) {
         insertNode.run(node.id, node.kind, node.name, node.repo, node.filePath ?? null, JSON.stringify(node.metadata ?? {}));
       }
-      const insertEdge = this.db.prepare(
-        "insert into edges (id, from_id, to_id, kind, repo, metadata) values (?, ?, ?, ?, ?, ?)"
-      );
+      const insertEdge = this.db.prepare("insert into edges (id, from_id, to_id, kind, repo, metadata) values (?, ?, ?, ?, ?, ?)");
       for (const edge of edges) {
         insertEdge.run(edge.id, edge.fromId, edge.toId, edge.kind, repo.name, JSON.stringify(edge.metadata ?? {}));
       }
@@ -257,9 +250,9 @@ export class ContextStore {
   }
 
   getNodes(): GraphNode[] {
-    return (this.db.prepare("select id, kind, name, repo, file_path as filePath, metadata from nodes order by repo, kind, name").all() as DbNode[]).map(
-      hydrateNode
-    );
+    return (
+      this.db.prepare("select id, kind, name, repo, file_path as filePath, metadata from nodes order by repo, kind, name").all() as DbNode[]
+    ).map(hydrateNode);
   }
 
   getEdges(): GraphEdge[] {
@@ -303,9 +296,10 @@ export class ContextStore {
   }
 
   getRepositoryDocs(): RepositoryDoc[] {
-    return (this.db
-      .prepare(
-        `select repo_id as repoId, repo_name as repoName, summary, markdown, generated_at as generatedAt,
+    return (
+      this.db
+        .prepare(
+          `select repo_id as repoId, repo_name as repoName, summary, markdown, generated_at as generatedAt,
                 source_fingerprint as sourceFingerprint, model, mode,
                 deterministic_summary as deterministicSummary,
                 deterministic_markdown as deterministicMarkdown,
@@ -315,8 +309,9 @@ export class ContextStore {
                 llm_generated_at as llmGeneratedAt,
                 llm_model as llmModel
          from repository_docs order by repo_name`
-      )
-      .all() as DbRepositoryDoc[]).map(hydrateRepositoryDoc);
+        )
+        .all() as DbRepositoryDoc[]
+    ).map(hydrateRepositoryDoc);
   }
 
   saveRepositoryDoc(doc: RepositoryDoc): void {
@@ -380,9 +375,10 @@ export class ContextStore {
   }
 
   getGraphItemDocs(repoName: string): GraphItemDoc[] {
-    return (this.db
-      .prepare(
-        `select node_id as nodeId, repo_name as repoName, node_kind as nodeKind, node_name as nodeName,
+    return (
+      this.db
+        .prepare(
+          `select node_id as nodeId, repo_name as repoName, node_kind as nodeKind, node_name as nodeName,
                 summary, markdown, generated_at as generatedAt, source_fingerprint as sourceFingerprint,
                 model, mode,
                 deterministic_summary as deterministicSummary,
@@ -393,8 +389,9 @@ export class ContextStore {
                 llm_generated_at as llmGeneratedAt,
                 llm_model as llmModel
          from graph_item_docs where repo_name = ? order by node_kind, node_name`
-      )
-      .all(repoName) as DbGraphItemDoc[]).map(hydrateGraphItemDoc);
+        )
+        .all(repoName) as DbGraphItemDoc[]
+    ).map(hydrateGraphItemDoc);
   }
 
   saveGraphItemDoc(doc: GraphItemDoc): void {
@@ -477,9 +474,7 @@ export class ContextStore {
     const matchedRepos = new Set(seeds.map((node) => node.repo));
     const relatedNodes = nodes.filter((node) => relatedIds.has(node.id) || matchedRepos.has(node.repo)).slice(0, 90);
     const suggestedFiles = unique(
-      relatedNodes
-        .map((node) => node.filePath)
-        .filter((filePath): filePath is string => Boolean(filePath))
+      relatedNodes.map((node) => node.filePath).filter((filePath): filePath is string => Boolean(filePath))
     ).slice(0, 12);
 
     return {
@@ -504,6 +499,11 @@ export class ContextStore {
 
   private migrate(): void {
     this.db.exec(`
+      create table if not exists schema_meta (
+        key text primary key,
+        value text not null,
+        updated_at text not null
+      );
       create table if not exists repositories (
         id text primary key,
         name text not null,
@@ -571,6 +571,8 @@ export class ContextStore {
     this.addColumnIfMissing("graph_item_docs", "llm_markdown", "llm_markdown text");
     this.addColumnIfMissing("graph_item_docs", "llm_generated_at", "llm_generated_at text");
     this.addColumnIfMissing("graph_item_docs", "llm_model", "llm_model text");
+    this.assertCompatibleSchemaVersion();
+    this.setSchemaVersion(CURRENT_SCHEMA_VERSION);
   }
 
   private addColumnIfMissing(table: string, column: string, ddl: string): void {
@@ -578,6 +580,29 @@ export class ContextStore {
     if (!columns.some((item) => item.name === column)) {
       this.db.exec(`alter table ${table} add column ${ddl}`);
     }
+  }
+
+  private assertCompatibleSchemaVersion(): void {
+    const row = this.db.prepare("select value from schema_meta where key = 'schema_version'").get() as { value: string } | undefined;
+    const version = Number(row?.value ?? CURRENT_SCHEMA_VERSION);
+    if (!Number.isInteger(version) || version < 1) {
+      throw new Error(`Invalid ContextOS schema version '${row?.value ?? ""}' in ${this.dbPath}.`);
+    }
+    if (version > CURRENT_SCHEMA_VERSION) {
+      throw new Error(
+        `ContextOS database schema version ${version} is newer than this app supports (${CURRENT_SCHEMA_VERSION}). Please update ContextOS.`
+      );
+    }
+  }
+
+  private setSchemaVersion(version: number): void {
+    this.db
+      .prepare(
+        `insert into schema_meta (key, value, updated_at)
+         values ('schema_version', ?, ?)
+         on conflict(key) do update set value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .run(String(version), new Date().toISOString());
   }
 
   private repositoryFingerprint(repoName: string): string {
@@ -634,7 +659,9 @@ export class ContextStore {
           mode: doc.mode,
           model: doc.model
         },
-        score: scoreText(`${doc.nodeName} ${doc.summary} ${doc.llmMarkdown ?? doc.deterministicMarkdown ?? doc.markdown}`, terms) + (relatedNodeIds.has(doc.nodeId) ? 2 : 0)
+        score:
+          scoreText(`${doc.nodeName} ${doc.summary} ${doc.llmMarkdown ?? doc.deterministicMarkdown ?? doc.markdown}`, terms) +
+          (relatedNodeIds.has(doc.nodeId) ? 2 : 0)
       }));
     return [...repoDocs, ...itemDocs]
       .sort((a, b) => b.score - a.score)
@@ -702,10 +729,10 @@ function hydrateRepositoryDoc(row: DbRepositoryDoc): RepositoryDoc {
   const hasLlm = Boolean(llmMarkdown);
   return {
     ...row,
-    summary: hasLlm ? llmSummary ?? row.summary : deterministicSummary,
-    markdown: hasLlm ? llmMarkdown ?? row.markdown : deterministicMarkdown,
-    generatedAt: hasLlm ? llmGeneratedAt ?? row.generatedAt : deterministicGeneratedAt,
-    model: hasLlm ? llmModel ?? undefined : undefined,
+    summary: hasLlm ? (llmSummary ?? row.summary) : deterministicSummary,
+    markdown: hasLlm ? (llmMarkdown ?? row.markdown) : deterministicMarkdown,
+    generatedAt: hasLlm ? (llmGeneratedAt ?? row.generatedAt) : deterministicGeneratedAt,
+    model: hasLlm ? (llmModel ?? undefined) : undefined,
     mode: hasLlm ? "openai" : "fallback",
     deterministicSummary,
     deterministicMarkdown,
@@ -728,10 +755,10 @@ function hydrateGraphItemDoc(row: DbGraphItemDoc): GraphItemDoc {
   const hasLlm = Boolean(llmMarkdown);
   return {
     ...row,
-    summary: hasLlm ? llmSummary ?? row.summary : deterministicSummary,
-    markdown: hasLlm ? llmMarkdown ?? row.markdown : deterministicMarkdown,
-    generatedAt: hasLlm ? llmGeneratedAt ?? row.generatedAt : deterministicGeneratedAt,
-    model: hasLlm ? llmModel ?? undefined : undefined,
+    summary: hasLlm ? (llmSummary ?? row.summary) : deterministicSummary,
+    markdown: hasLlm ? (llmMarkdown ?? row.markdown) : deterministicMarkdown,
+    generatedAt: hasLlm ? (llmGeneratedAt ?? row.generatedAt) : deterministicGeneratedAt,
+    model: hasLlm ? (llmModel ?? undefined) : undefined,
     mode: hasLlm ? "openai" : "fallback",
     deterministicSummary,
     deterministicMarkdown,
@@ -755,11 +782,11 @@ function repositoryDocRecord(doc: RepositoryDoc): Record<string, string | null> 
   return {
     repoId: doc.repoId,
     repoName: doc.repoName,
-    summary: hasLlm ? llmSummary ?? doc.summary : deterministicSummary,
-    markdown: hasLlm ? llmMarkdown ?? doc.markdown : deterministicMarkdown,
-    generatedAt: hasLlm ? llmGeneratedAt ?? doc.generatedAt : deterministicGeneratedAt,
+    summary: hasLlm ? (llmSummary ?? doc.summary) : deterministicSummary,
+    markdown: hasLlm ? (llmMarkdown ?? doc.markdown) : deterministicMarkdown,
+    generatedAt: hasLlm ? (llmGeneratedAt ?? doc.generatedAt) : deterministicGeneratedAt,
     sourceFingerprint: doc.sourceFingerprint,
-    model: hasLlm ? llmModel ?? null : null,
+    model: hasLlm ? (llmModel ?? null) : null,
     mode: hasLlm ? "openai" : "fallback",
     deterministicSummary,
     deterministicMarkdown,
@@ -785,11 +812,11 @@ function graphItemDocRecord(doc: GraphItemDoc): Record<string, string | null> {
     repoName: doc.repoName,
     nodeKind: doc.nodeKind,
     nodeName: doc.nodeName,
-    summary: hasLlm ? llmSummary ?? doc.summary : deterministicSummary,
-    markdown: hasLlm ? llmMarkdown ?? doc.markdown : deterministicMarkdown,
-    generatedAt: hasLlm ? llmGeneratedAt ?? doc.generatedAt : deterministicGeneratedAt,
+    summary: hasLlm ? (llmSummary ?? doc.summary) : deterministicSummary,
+    markdown: hasLlm ? (llmMarkdown ?? doc.markdown) : deterministicMarkdown,
+    generatedAt: hasLlm ? (llmGeneratedAt ?? doc.generatedAt) : deterministicGeneratedAt,
     sourceFingerprint: doc.sourceFingerprint,
-    model: hasLlm ? llmModel ?? null : null,
+    model: hasLlm ? (llmModel ?? null) : null,
     mode: hasLlm ? "openai" : "fallback",
     deterministicSummary,
     deterministicMarkdown,
