@@ -154,6 +154,111 @@ class HelloController {
     }
   });
 
+  it("detects Spring MVC @Controller endpoints and Spring Data repository interfaces", () => {
+    const root = mkdtempSync(join(tmpdir(), "contextos-scanner-"));
+    try {
+      const sourceDir = join(root, "src/main/java/com/example");
+      const sqlDir = join(root, "src/main/resources/db/h2");
+      const mysqlSqlDir = join(root, "src/main/resources/db/mysql");
+      const testDir = join(root, "src/test/java/com/example");
+      mkdirSync(sourceDir, { recursive: true });
+      mkdirSync(sqlDir, { recursive: true });
+      mkdirSync(mysqlSqlDir, { recursive: true });
+      mkdirSync(testDir, { recursive: true });
+      writeFileSync(
+        join(sourceDir, "OwnerController.java"),
+        `package com.example;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+
+@Controller
+class OwnerController {
+  private final OwnerRepository owners;
+
+  OwnerController(OwnerRepository owners) {
+    this.owners = owners;
+  }
+
+  @GetMapping("/owners")
+  String listOwners() {
+    return "owners/list";
+  }
+
+  @PostMapping("/owners/new")
+  String createOwner() {
+    return "redirect:/owners";
+  }
+}
+`
+      );
+      writeFileSync(
+        join(sourceDir, "OwnerRepository.java"),
+        `package com.example;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+interface OwnerRepository extends JpaRepository<Owner, Integer> {
+}
+`
+      );
+      writeFileSync(
+        join(sourceDir, "Owner.java"),
+        `package com.example;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "owners")
+class Owner {
+}
+`
+      );
+      writeFileSync(join(sqlDir, "schema.sql"), "create table owners (id integer primary key);");
+      writeFileSync(join(mysqlSqlDir, "schema.sql"), "create table owners (id integer primary key);");
+      writeFileSync(
+        join(testDir, "OwnerControllerTest.java"),
+        `package com.example;
+
+import org.springframework.stereotype.Service;
+
+@Service
+class OwnerControllerTest {
+}
+`
+      );
+
+      const result = scanRepository({
+        id: "repo:mvc",
+        name: "mvc-service",
+        path: root,
+        addedAt: new Date().toISOString()
+      });
+
+      const controller = result.nodes.find((node) => node.name === "OwnerController");
+      const repository = result.nodes.find((node) => node.name === "OwnerRepository");
+      const ownersTable = result.nodes.find((node) => node.kind === "Table" && node.name === "owners");
+
+      expect(controller?.metadata?.stereotype).toBe("Controller");
+      expect(repository?.metadata?.stereotype).toBe("Repository");
+      expect(result.nodes.some((node) => node.kind === "Endpoint" && node.name === "GET /owners")).toBe(true);
+      expect(result.nodes.some((node) => node.kind === "Endpoint" && node.name === "POST /owners/new")).toBe(true);
+      expect(ownersTable).toBeDefined();
+      expect(result.nodes.filter((node) => node.kind === "Table" && node.name === "owners")).toHaveLength(1);
+      expect(result.nodes.some((node) => node.name === "OwnerControllerTest")).toBe(false);
+      expect(result.edges.some((edge) => edge.fromId === controller?.id && edge.toId === repository?.id && edge.kind === "calls")).toBe(
+        true
+      );
+      expect(result.edges.some((edge) => edge.fromId === repository?.id && edge.toId === ownersTable?.id && edge.kind === "reads")).toBe(
+        true
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("detects request mapping methods, array paths, and array Kafka topics", () => {
     const root = mkdtempSync(join(tmpdir(), "contextos-scanner-"));
     try {

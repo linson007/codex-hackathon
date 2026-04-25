@@ -98,6 +98,7 @@ type EnterpriseExport = {
     services: Node[];
     controllers: Node[];
     clients: Node[];
+    repositories: Node[];
     endpoints: Node[];
     tables: Node[];
     topics: Node[];
@@ -123,11 +124,13 @@ type EnterpriseExport = {
   };
 };
 type GraphCategory = "Controller" | "Service" | "Client" | "Repository" | "Endpoint" | "Topic" | "Table" | "External";
-type GraphNodeData = { label: string; sublabel: string; category: GraphCategory };
+type GraphNodeData = { label: string; sublabel: string; category: GraphCategory; badge?: string };
 type GraphViewNode = FlowNode<GraphNodeData, "graphNode">;
+type GraphMode = "compact" | "routes";
 type DocVariant = "llm" | "deterministic";
 type ThemeMode = "light" | "dark";
 const graphNodeTypes = { graphNode: GraphNodeCard };
+const defaultQuestion = "What should a new joiner understand first?";
 
 const apiBase = import.meta.env.VITE_CONTEXTOS_API ?? "http://localhost:4317";
 mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base" });
@@ -147,7 +150,7 @@ function App() {
   const [askIncludeDocs, setAskIncludeDocs] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => (localStorage.getItem("contextos-theme") === "dark" ? "dark" : "light"));
   const [showExportPanel, setShowExportPanel] = useState(false);
-  const [question, setQuestion] = useState("What is impacted if I change refund eligibility logic?");
+  const [question, setQuestion] = useState(defaultQuestion);
   const [answer, setAnswer] = useState<AskResult | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState("");
   const [askStatus, setAskStatus] = useState("");
@@ -190,6 +193,9 @@ function App() {
         setSummary(kbSummary);
         setEnterpriseExport(exportPayload);
         setRepoOverviews(repoPayload.repositories);
+        setQuestion((current) =>
+          isDefaultOrStaleQuestion(current) ? buildPrimaryQuestion(kbSummary.nodes, repoPayload.repositories) : current
+        );
         setSelectedRepo((current) =>
           repoPayload.repositories.some((repo) => repo.name === current) ? current : repoPayload.repositories[0]?.name || ""
         );
@@ -235,7 +241,7 @@ function App() {
   }, [selectedKb, selectedItemId]);
 
   const serviceNodes = useMemo(() => summary?.nodes.filter((node) => node.kind === "Service") ?? [], [summary]);
-  const controllerNodes = useMemo(() => serviceNodes.filter((node) => node.metadata?.stereotype === "RestController"), [serviceNodes]);
+  const controllerNodes = useMemo(() => serviceNodes.filter(isControllerNode), [serviceNodes]);
   const businessServiceNodes = useMemo(() => serviceNodes.filter((node) => classifyNode(node) === "Service"), [serviceNodes]);
   const clientNodes = useMemo(() => serviceNodes.filter((node) => classifyNode(node) === "Client"), [serviceNodes]);
   const repositoryNodes = useMemo(() => serviceNodes.filter((node) => classifyNode(node) === "Repository"), [serviceNodes]);
@@ -251,10 +257,7 @@ function App() {
     [summary, repoOverviews]
   );
   const serviceDocItems = useMemo(() => docItems.filter((item) => item.nodeKind === "Service"), [docItems]);
-  const controllerDocItems = useMemo(
-    () => serviceDocItems.filter((item) => item.metadata?.stereotype === "RestController"),
-    [serviceDocItems]
-  );
+  const controllerDocItems = useMemo(() => serviceDocItems.filter(isControllerItem), [serviceDocItems]);
   const clientDocItems = useMemo(() => serviceDocItems.filter((item) => item.metadata?.stereotype === "FeignClient"), [serviceDocItems]);
   const repositoryDocItems = useMemo(() => serviceDocItems.filter((item) => item.metadata?.stereotype === "Repository"), [serviceDocItems]);
   const businessServiceDocItems = useMemo(
@@ -761,20 +764,60 @@ function docStatus(doc: RepoDoc | ItemDoc, variant: DocVariant): string {
 }
 
 function buildAskSuggestions(nodes: Node[], repoNames: string[]): string[] {
-  const services = nodes.filter((node) => node.kind === "Service" && !node.metadata?.external).map((node) => node.name);
-  const endpoints = nodes.filter((node) => node.kind === "Endpoint").map((node) => node.name);
-  const tables = nodes.filter((node) => node.kind === "Table").map((node) => node.name);
-  const topics = nodes.filter((node) => node.kind === "Topic").map((node) => node.name);
+  const services = preferredNodes(nodes, (node) => node.kind === "Service" && classifyNode(node) === "Service").map((node) => node.name);
+  const controllers = preferredNodes(nodes, (node) => node.kind === "Service" && isControllerNode(node)).map((node) => node.name);
+  const endpoints = preferredNodes(nodes, (node) => node.kind === "Endpoint").map((node) => node.name);
+  const tables = preferredNodes(nodes, (node) => node.kind === "Table").map((node) => node.name);
+  const topics = preferredNodes(nodes, (node) => node.kind === "Topic").map((node) => node.name);
+  const repoName = repoNames[0] ?? "this codebase";
   return uniqueStrings([
-    "What is impacted if I change refund eligibility logic?",
+    buildPrimaryQuestion(
+      nodes,
+      repoNames.map((name) => ({ name }) as RepoOverview)
+    ),
+    `Summarize ${repoName} for a new joiner.`,
+    controllers[0] ? `What does ${controllers[0]} handle?` : "",
     services[0] ? `Explain the responsibilities of ${services[0]}.` : "",
     endpoints[0] ? `Trace the request flow for ${endpoints[0]}.` : "",
     tables[0] ? `Which code paths use the ${tables[0]} table?` : "",
-    topics[0] ? `Who publishes or consumes ${topics[0]}?` : "",
-    repoNames[0] ? `Summarize ${repoNames[0]} for a new joiner.` : ""
+    topics[0] ? `Who publishes or consumes ${topics[0]}?` : ""
   ])
     .filter(Boolean)
     .slice(0, 6);
+}
+
+function buildPrimaryQuestion(nodes: Node[], repos: Array<Pick<RepoOverview, "name">>): string {
+  const endpoints = preferredNodes(nodes, (node) => node.kind === "Endpoint").map((node) => String(node.metadata?.path ?? node.name));
+  const ownerEndpoint = endpoints.find((endpoint) => endpoint.includes("/owners"));
+  const refundEndpoint = endpoints.find((endpoint) => endpoint.toLowerCase().includes("refund"));
+  if (refundEndpoint) return "What is impacted if I change refund eligibility logic?";
+  if (ownerEndpoint) return "What is impacted if I change the owner management flow?";
+  const repoName = repos[0]?.name;
+  return repoName ? `What should a new joiner understand first in ${repoName}?` : defaultQuestion;
+}
+
+function preferredNodes(nodes: Node[], predicate: (node: Node) => boolean): Node[] {
+  return nodes.filter(predicate).sort((a, b) => scoreSuggestionNode(b) - scoreSuggestionNode(a) || a.name.localeCompare(b.name));
+}
+
+function scoreSuggestionNode(node: Node): number {
+  const text = `${node.name} ${node.filePath ?? ""} ${String(node.metadata?.controller ?? "")}`.toLowerCase();
+  let score = 0;
+  for (const term of ["owner", "refund", "order", "pet", "visit", "vet"]) {
+    if (text.includes(term)) score += 3;
+  }
+  if (node.kind === "Endpoint") score += 2;
+  if (node.kind === "Service" && isControllerNode(node)) score += 2;
+  return score;
+}
+
+function isDefaultOrStaleQuestion(value: string): boolean {
+  return (
+    value === defaultQuestion ||
+    value === "What is impacted if I change refund eligibility logic?" ||
+    value === "What is impacted if I change the owner management flow?" ||
+    value.startsWith("What should a new joiner understand first")
+  );
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -841,12 +884,32 @@ function summaryPreview(value?: string): string {
 }
 
 function DependencyGraph({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
-  const graph = useMemo(() => buildDependencyGraph(nodes, edges), [nodes, edges]);
+  const [mode, setMode] = useState<GraphMode>("compact");
+  const graph = useMemo(() => buildDependencyGraph(nodes, edges, mode), [nodes, edges, mode]);
   if (!graph.nodes.length) {
     return <div className="graphEmpty">Run update to build graph data.</div>;
   }
   return (
     <div className="graphCanvas">
+      <div className="graphToolbar" aria-label="Dependency graph display mode">
+        <span>Graph view</span>
+        <button
+          type="button"
+          aria-pressed={mode === "compact"}
+          className={mode === "compact" ? "active" : ""}
+          onClick={() => setMode("compact")}
+        >
+          Compact
+        </button>
+        <button
+          type="button"
+          aria-pressed={mode === "routes"}
+          className={mode === "routes" ? "active" : ""}
+          onClick={() => setMode("routes")}
+        >
+          Show Routes
+        </button>
+      </div>
       <ReactFlow
         nodes={graph.nodes}
         edges={graph.edges}
@@ -856,7 +919,7 @@ function DependencyGraph({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
         aria-label="Dependency graph"
       >
         <Background />
-        <Controls aria-label="Dependency graph controls" />
+        <Controls aria-label="Dependency graph controls" showFitView={false} />
         <MiniMap pannable zoomable />
       </ReactFlow>
       <div className="graphLegend">
@@ -873,7 +936,7 @@ function DependencyGraph({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
           <i className="repositoryDot" /> Repository
         </span>
         <span>
-          <i className="endpointDot" /> Endpoint
+          <i className="endpointDot" /> {mode === "compact" ? "Routes shown as controller badges" : "Endpoint routes"}
         </span>
         <span>
           <i className="topicDot" /> Topic
@@ -886,9 +949,26 @@ function DependencyGraph({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
   );
 }
 
-function buildDependencyGraph(nodes: Node[], edges: Edge[]) {
-  const visibleKinds = new Set(["Service", "Endpoint", "Topic", "Table"]);
-  const visibleEdges = edges.filter((edge) => ["calls", "consumes", "depends_on", "exposes", "writes"].includes(edge.kind));
+function buildDependencyGraph(nodes: Node[], edges: Edge[], mode: GraphMode) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const endpointById = new Map(nodes.filter((node) => node.kind === "Endpoint").map((node) => [node.id, node]));
+  const controllerByEndpointId = new Map<string, string>();
+  const endpointCountsByController = new Map<string, number>();
+  edges
+    .filter((edge) => edge.kind === "exposes" && endpointById.has(edge.toId))
+    .forEach((edge) => {
+      controllerByEndpointId.set(edge.toId, edge.fromId);
+      endpointCountsByController.set(edge.fromId, (endpointCountsByController.get(edge.fromId) ?? 0) + 1);
+    });
+
+  const showRoutes = mode === "routes";
+  const visibleKinds = new Set(showRoutes ? ["Service", "Endpoint", "Topic", "Table"] : ["Service", "Topic", "Table"]);
+  const visibleEdges = edges.filter((edge) =>
+    (showRoutes
+      ? ["calls", "consumes", "depends_on", "exposes", "reads", "writes"]
+      : ["calls", "consumes", "depends_on", "reads", "writes"]
+    ).includes(edge.kind)
+  );
   const referencedIds = new Set<string>();
   visibleEdges.forEach((edge) => {
     referencedIds.add(edge.fromId);
@@ -902,23 +982,42 @@ function buildDependencyGraph(nodes: Node[], edges: Edge[]) {
   });
   const byKind = [
     { category: "Controller" as const, x: 0 },
-    { category: "Endpoint" as const, x: 250 },
-    { category: "Service" as const, x: 500 },
-    { category: "Client" as const, x: 750 },
-    { category: "External" as const, x: 1000 },
-    { category: "Topic" as const, x: 1250 },
-    { category: "Table" as const, x: 1500 }
+    ...(showRoutes ? [{ category: "Endpoint" as const, x: 280 }] : []),
+    { category: "Service" as const, x: showRoutes ? 560 : 280 },
+    { category: "Repository" as const, x: showRoutes ? 840 : 560 },
+    { category: "Client" as const, x: showRoutes ? 1120 : 840 },
+    { category: "External" as const, x: showRoutes ? 1400 : 1120 },
+    { category: "Topic" as const, x: showRoutes ? 1680 : 1400 },
+    { category: "Table" as const, x: showRoutes ? 1960 : 1680 }
   ];
   const graphNodes: GraphViewNode[] = [];
+  const yByNodeId = new Map<string, number>();
+  const endpointIndexById = buildEndpointIndexById(controllerByEndpointId, endpointById);
+  const controllerLaneYById = buildControllerLaneYById(candidates, endpointCountsByController);
   for (const group of byKind) {
-    const groupNodes = candidates.filter((node) => classifyNode(node) === group.category).slice(0, 10);
-    const step = 95;
+    const groupNodes = orderGraphGroup(candidates, group.category, controllerByEndpointId, nodeById, yByNodeId, showRoutes).slice(0, 18);
     groupNodes.forEach((node, index) => {
+      const y = routeAwareY(
+        node,
+        group.category,
+        index,
+        controllerByEndpointId,
+        endpointIndexById,
+        yByNodeId,
+        controllerLaneYById,
+        showRoutes
+      );
+      yByNodeId.set(node.id, y);
       graphNodes.push({
         id: node.id,
         type: "graphNode",
-        position: { x: group.x, y: 20 + step * index },
-        data: { label: node.name, sublabel: `${group.category} / ${node.repo}`, category: group.category },
+        position: { x: group.x, y },
+        data: {
+          label: node.name,
+          sublabel: `${group.category} / ${node.repo}`,
+          category: group.category,
+          badge: !showRoutes && endpointCountsByController.has(node.id) ? `${endpointCountsByController.get(node.id)} routes` : undefined
+        },
         className: `flowNode ${group.category.toLowerCase()}`,
         sourcePosition: Position.Right,
         targetPosition: Position.Left
@@ -945,12 +1044,107 @@ function buildDependencyGraph(nodes: Node[], edges: Edge[]) {
   };
 }
 
+function orderGraphGroup(
+  candidates: Node[],
+  category: GraphCategory,
+  controllerByEndpointId: Map<string, string>,
+  nodeById: Map<string, Node>,
+  yByNodeId: Map<string, number>,
+  showRoutes: boolean
+): Node[] {
+  const groupNodes = candidates.filter((node) => classifyNode(node) === category);
+  if (showRoutes && category === "Endpoint") {
+    return groupNodes.sort((a, b) => {
+      const aController = nodeById.get(controllerByEndpointId.get(a.id) ?? "")?.name ?? "";
+      const bController = nodeById.get(controllerByEndpointId.get(b.id) ?? "")?.name ?? "";
+      return aController.localeCompare(bController) || httpMethodOrder(a) - httpMethodOrder(b) || a.name.localeCompare(b.name);
+    });
+  }
+  return groupNodes.sort((a, b) => {
+    const aY = yByNodeId.get(a.id);
+    const bY = yByNodeId.get(b.id);
+    if (aY !== undefined && bY !== undefined) return aY - bY;
+    if (aY !== undefined) return -1;
+    if (bY !== undefined) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function routeAwareY(
+  node: Node,
+  category: GraphCategory,
+  index: number,
+  controllerByEndpointId: Map<string, string>,
+  endpointIndexById: Map<string, number>,
+  yByNodeId: Map<string, number>,
+  controllerLaneYById: Map<string, number>,
+  showRoutes: boolean
+): number {
+  const baseStep = 95;
+  const endpointStep = 76;
+  if (showRoutes && category === "Controller") {
+    return controllerLaneYById.get(node.id) ?? 20 + baseStep * index;
+  }
+  if (showRoutes && category === "Endpoint") {
+    const controllerId = controllerByEndpointId.get(node.id) ?? "";
+    const controllerY = yByNodeId.get(controllerId);
+    if (controllerY !== undefined) {
+      return controllerY + Math.max(0, endpointIndexById.get(node.id) ?? 0) * endpointStep;
+    }
+  }
+  return 20 + baseStep * index;
+}
+
+function buildControllerLaneYById(candidates: Node[], endpointCountsByController: Map<string, number>): Map<string, number> {
+  const endpointStep = 76;
+  const laneGap = 84;
+  let y = 20;
+  const lanes = new Map<string, number>();
+  candidates
+    .filter((node) => isControllerNode(node))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach((controller) => {
+      lanes.set(controller.id, y);
+      y += Math.max(1, endpointCountsByController.get(controller.id) ?? 1) * endpointStep + laneGap;
+    });
+  return lanes;
+}
+
+function buildEndpointIndexById(controllerByEndpointId: Map<string, string>, endpointById: Map<string, Node>): Map<string, number> {
+  const grouped = new Map<string, string[]>();
+  for (const [endpointId, controllerId] of controllerByEndpointId) {
+    grouped.set(controllerId, [...(grouped.get(controllerId) ?? []), endpointId]);
+  }
+  const indexes = new Map<string, number>();
+  for (const endpointIds of grouped.values()) {
+    endpointIds
+      .sort((a, b) => {
+        const endpointA = endpointById.get(a);
+        const endpointB = endpointById.get(b);
+        return (endpointA ? httpMethodOrder(endpointA) : 0) - (endpointB ? httpMethodOrder(endpointB) : 0) || a.localeCompare(b);
+      })
+      .forEach((endpointId, index) => indexes.set(endpointId, index));
+  }
+  return indexes;
+}
+
+function httpMethodOrder(node: Node): number {
+  const method = String(node.metadata?.method ?? node.name.split(" ")[0]);
+  return httpMethodRank(method);
+}
+
+function httpMethodRank(method: string): number {
+  const rank = ["GET", "POST", "PUT", "PATCH", "DELETE", "ANY"].indexOf(method);
+  return rank >= 0 ? rank : 99;
+}
+
 function GraphNodeCard({ data }: NodeProps<GraphViewNode>) {
   return (
     <div className={`graphNodeCard ${data.category.toLowerCase()}`}>
       <Handle type="target" position={Position.Left} />
       <strong>{data.label}</strong>
       <span>{data.sublabel}</span>
+      {data.badge && <em>{data.badge}</em>}
       <Handle type="source" position={Position.Right} />
     </div>
   );
@@ -961,10 +1155,18 @@ function classifyNode(node: Node): GraphCategory {
   if (node.kind === "Topic") return "Topic";
   if (node.kind === "Table") return "Table";
   if (node.kind === "Service" && node.metadata?.external) return "External";
-  if (node.kind === "Service" && node.metadata?.stereotype === "RestController") return "Controller";
+  if (node.kind === "Service" && isControllerNode(node)) return "Controller";
   if (node.kind === "Service" && node.metadata?.stereotype === "FeignClient") return "Client";
   if (node.kind === "Service" && node.metadata?.stereotype === "Repository") return "Repository";
   return "Service";
+}
+
+function isControllerNode(node: Node): boolean {
+  return node.metadata?.stereotype === "RestController" || node.metadata?.stereotype === "Controller";
+}
+
+function isControllerItem(item: ItemDocSummary): boolean {
+  return item.metadata?.stereotype === "RestController" || item.metadata?.stereotype === "Controller";
 }
 
 function AnswerPanel({ text, emptyText }: { text?: string; emptyText: string }) {

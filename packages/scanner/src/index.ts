@@ -41,7 +41,7 @@ export function scanRepository(repo: RepositoryRecord): ScanResult {
       const service = addNode(nodes, { kind: "Service", name: appName, repo: repo.name, filePath: absolutePath });
       addEdge(edges, repoNode.id, service.id, "contains", repo.name);
     }
-    if (/V\d+__.*\.sql$/.test(relPath)) {
+    if (/\.sql$/.test(relPath)) {
       for (const table of extractTables(text)) {
         const tableNode = addNode(nodes, { kind: "Table", name: table, repo: repo.name, filePath: absolutePath });
         addEdge(edges, fileNode.id, tableNode.id, "writes", repo.name);
@@ -67,13 +67,14 @@ function scanJavaFile(
 ): void {
   const className = match(text, /\b(class|interface|enum)\s+([A-Z][A-Za-z0-9_]*)/, 2) ?? basename(relPath, ".java");
   let classNode: GraphNode | undefined;
-  if (/@RestController/.test(text)) {
+  const controllerStereotype = match(text, /@(RestController|Controller)\b/);
+  if (controllerStereotype) {
     classNode = addNode(nodes, {
       kind: "Service",
       name: className,
       repo: repo.name,
       filePath: absolutePath,
-      metadata: { stereotype: "RestController" }
+      metadata: { stereotype: controllerStereotype }
     });
     addEdge(edges, fileNodeId, classNode.id, "contains", repo.name);
     for (const endpoint of extractEndpoints(text)) {
@@ -97,7 +98,10 @@ function scanJavaFile(
     });
     addEdge(edges, fileNodeId, classNode.id, "contains", repo.name);
   }
-  if (/@Repository/.test(text)) {
+  if (
+    /@Repository/.test(text) ||
+    /\binterface\s+[A-Z][A-Za-z0-9_]*\s+extends\s+(?:[A-Za-z0-9_]+\.)?(?:Repository|CrudRepository|JpaRepository)\b/.test(text)
+  ) {
     classNode = addNode(nodes, {
       kind: "Service",
       name: className,
@@ -151,11 +155,29 @@ function scanJavaFile(
 
 function linkCrossReferences(repoName: string, nodes: Map<string, GraphNode>, edges: Map<string, GraphEdge>): void {
   linkSourceReferences(repoName, nodes, edges);
+  linkRepositoryDataAccess(repoName, nodes, edges);
   const topics = [...nodes.values()].filter((node) => node.kind === "Topic");
   for (const publisher of topics) {
     for (const consumer of topics) {
       if (publisher.id !== consumer.id && publisher.name === consumer.name) {
         addEdge(edges, publisher.id, consumer.id, "depends_on", repoName, { reason: "same topic" });
+      }
+    }
+  }
+}
+
+function linkRepositoryDataAccess(repoName: string, nodes: Map<string, GraphNode>, edges: Map<string, GraphEdge>): void {
+  const repoNodes = [...nodes.values()].filter((node) => node.repo === repoName);
+  const repositories = repoNodes.filter((node) => node.kind === "Service" && node.metadata?.stereotype === "Repository" && node.filePath);
+  const entities = repoNodes.filter((node) => node.kind === "Entity");
+  for (const repository of repositories) {
+    const text = safeRead(repository.filePath);
+    if (!text) continue;
+    for (const entity of entities) {
+      if (!text.includes(entity.name)) continue;
+      addEdge(edges, repository.id, entity.id, "depends_on", repoName, { via: "repository generic" });
+      for (const entityTableEdge of [...edges.values()].filter((edge) => edge.fromId === entity.id && edge.kind === "writes")) {
+        addEdge(edges, repository.id, entityTableEdge.toId, "reads", repoName, { via: entity.name });
       }
     }
   }
@@ -179,7 +201,7 @@ function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const path = join(dir, entry);
     const stat = statSync(path);
-    if (stat.isDirectory() && !["node_modules", ".git", "target", "dist", "build"].includes(entry)) {
+    if (stat.isDirectory() && !["node_modules", ".git", "target", "dist", "build"].includes(entry) && !isTestPath(path)) {
       return walk(path);
     }
     return stat.isFile() ? [path] : [];
@@ -187,7 +209,12 @@ function walk(dir: string): string[] {
 }
 
 function isInterestingFile(path: string): boolean {
+  if (isTestPath(path)) return false;
   return /\.(java|xml|ya?ml|properties|sql)$/.test(path) || /build\.gradle$/.test(path);
+}
+
+function isTestPath(path: string): boolean {
+  return /[/\\]src[/\\]test[/\\]/.test(path);
 }
 
 function extractEndpoints(text: string): Array<{ method: string; path: string }> {
@@ -272,9 +299,21 @@ function extractTables(text: string): string[] {
 }
 
 function addNode(nodes: Map<string, GraphNode>, node: Omit<GraphNode, "id">): GraphNode {
-  const id = stableId("node", `${node.kind}:${node.repo}:${node.name}:${node.filePath ?? ""}`);
+  const identityPath = ["Table", "Topic"].includes(node.kind) ? "" : (node.filePath ?? "");
+  const id = stableId("node", `${node.kind}:${node.repo}:${node.name}:${identityPath}`);
   const existing = nodes.get(id);
-  if (existing) return existing;
+  if (existing) {
+    existing.metadata = {
+      ...(existing.metadata ?? {}),
+      ...(node.metadata ?? {}),
+      sourceFiles: unique([
+        ...(((existing.metadata?.sourceFiles as string[] | undefined) ?? []) as string[]),
+        ...(existing.filePath ? [existing.filePath] : []),
+        ...(node.filePath ? [node.filePath] : [])
+      ])
+    };
+    return existing;
+  }
   const full = { ...node, id };
   nodes.set(id, full);
   return full;

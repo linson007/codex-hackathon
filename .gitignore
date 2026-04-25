@@ -6,3 +6,4 @@ coverage/
 *.log
 *.tsbuildinfo
 *.d.ts.map
+samples/open-source/

@@ -123,6 +123,7 @@ export type EnterpriseExport = {
     services: ExportNode[];
     controllers: ExportNode[];
     clients: ExportNode[];
+    repositories: ExportNode[];
     endpoints: ExportNode[];
     tables: ExportNode[];
     topics: ExportNode[];
@@ -500,7 +501,10 @@ export class ContextStore {
       relatedIds.add(edge.toId);
     });
     const matchedRepos = new Set(seeds.map((node) => node.repo));
-    const relatedNodes = nodes.filter((node) => relatedIds.has(node.id) || matchedRepos.has(node.repo)).slice(0, 90);
+    const relatedNodes = nodes
+      .filter((node) => relatedIds.has(node.id) || matchedRepos.has(node.repo))
+      .sort((a, b) => rankEvidenceNode(a, seedIds, relatedIds, terms) - rankEvidenceNode(b, seedIds, relatedIds, terms))
+      .slice(0, 90);
     const suggestedFiles = unique(
       relatedNodes.map((node) => node.filePath).filter((filePath): filePath is string => Boolean(filePath))
     ).slice(0, 12);
@@ -553,8 +557,9 @@ export class ContextStore {
         services: serviceNodes
           .filter((node) => node.metadata?.stereotype === "Service" || (!node.metadata?.stereotype && !node.metadata?.external))
           .map(exportNode),
-        controllers: serviceNodes.filter((node) => node.metadata?.stereotype === "RestController").map(exportNode),
+        controllers: serviceNodes.filter(isControllerNode).map(exportNode),
         clients: serviceNodes.filter((node) => node.metadata?.stereotype === "FeignClient" || node.metadata?.external).map(exportNode),
+        repositories: serviceNodes.filter((node) => node.metadata?.stereotype === "Repository").map(exportNode),
         endpoints: nodes.filter((node) => node.kind === "Endpoint").map(exportNode),
         tables: nodes.filter((node) => node.kind === "Table").map(exportNode),
         topics: nodes.filter((node) => node.kind === "Topic").map(exportNode)
@@ -966,6 +971,15 @@ function scoreNode(node: GraphNode, terms: string[]): number {
   return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
 }
 
+function rankEvidenceNode(node: GraphNode, seedIds: Set<string>, relatedIds: Set<string>, terms: string[]): number {
+  if (seedIds.has(node.id)) return 0;
+  const score = scoreNode(node, terms);
+  if (relatedIds.has(node.id)) return score > 0 ? 1 : 2;
+  if (score > 0) return 3;
+  if (node.kind === "Service" || node.kind === "Endpoint" || node.kind === "Table" || node.kind === "Topic") return 4;
+  return 5;
+}
+
 function scoreText(value: string, terms: string[]): number {
   const haystack = value.toLowerCase();
   return terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
@@ -983,6 +997,10 @@ function compactMarkdown(value: string): string {
 
 function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
+}
+
+function isControllerNode(node: GraphNode): boolean {
+  return node.metadata?.stereotype === "RestController" || node.metadata?.stereotype === "Controller";
 }
 
 export function stableId(prefix: string, value: string): string {

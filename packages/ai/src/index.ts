@@ -477,7 +477,7 @@ function sanitizeMermaidLabel(value: string): string {
 }
 
 function readingPath(nodes: GraphNode[], _edges: GraphEdge[]): string[] {
-  const controllers = uniqueNodes(nodes.filter((node) => node.kind === "Service" && node.metadata?.stereotype === "RestController"));
+  const controllers = uniqueNodes(nodes.filter((node) => node.kind === "Service" && isControllerNode(node)));
   const services = uniqueNodes(nodes.filter((node) => node.kind === "Service" && node.metadata?.stereotype === "Service"));
   const repositories = uniqueNodes(nodes.filter((node) => node.kind === "Service" && node.metadata?.stereotype === "Repository"));
   const data = uniqueNodes(nodes.filter((node) => node.kind === "Entity" || node.kind === "Table"));
@@ -487,6 +487,10 @@ function readingPath(nodes: GraphNode[], _edges: GraphEdge[]): string[] {
     ...repositories.slice(0, 4).map((node) => `Check data access in ${fileLine(node)}.`),
     ...data.slice(0, 6).map((node) => `Review data model ${fileLine(node)}.`)
   ].slice(0, 12);
+}
+
+function isControllerNode(node: GraphNode): boolean {
+  return node.metadata?.stereotype === "RestController" || node.metadata?.stereotype === "Controller";
 }
 
 function uniqueNodes(nodes: GraphNode[]): GraphNode[] {
