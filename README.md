@@ -108,6 +108,12 @@ The skill lives at:
 skills/contextos-codebase-analysis/SKILL.md
 ```
 
+Portable copy for tools that expect a `.skills` folder:
+
+```text
+.skills/contextos-codebase-analysis/SKILL.md
+```
+
 The intended agent flow is:
 
 ```bash

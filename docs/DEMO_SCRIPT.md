@@ -217,3 +217,27 @@ If a port is stuck:
 lsof -ti :4317 | xargs kill -9
 lsof -ti :5173 | xargs kill -9
 ```
+
+## Skill Demo
+
+Show the skill file:
+
+```bash
+open skills/contextos-codebase-analysis/SKILL.md
+```
+
+Demo prompt for Codex or Claude:
+
+```text
+Use ContextOS to understand what files I should inspect before changing the owner creation flow in spring-petclinic.
+```
+
+Expected agent commands:
+
+```bash
+./bin/contextos.js kbs
+./bin/contextos.js update spring-petclinic
+./bin/contextos.js ask spring-petclinic "What files should I inspect before changing owner creation flow?" --with-docs --verbose
+```
+
+The key point: the agent is not guessing from prompt context. It is using the local ContextOS KB to retrieve graph facts, docs, impacted files, endpoints, tables, and dependencies before answering or editing.
