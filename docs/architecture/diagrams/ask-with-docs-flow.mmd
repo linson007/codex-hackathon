@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor User
+  participant UI as CLI or UI
+  participant Store as SQLite KB Store
+  participant AI as AI Package
+  participant OpenAI as OpenAI API
+
+  User->>UI: ask with Graph + Docs
+  UI->>Store: searchEvidence(question, includeDocs=true)
+  Store->>Store: keyword + symbol match graph nodes
+  Store->>Store: find relevant repo/service/endpoint docs
+  Store->>Store: prefer LLM doc, else deterministic doc
+  Store-->>UI: evidence bundle with graph + docs
+  UI->>AI: answerQuestion(evidence)
+  alt OPENAI_API_KEY set
+    AI->>OpenAI: send graph facts + selected generated docs
+    OpenAI-->>AI: answer using graph as authority and docs as context
+  else no key or API failure
+    AI-->>UI: deterministic answer listing matched graph facts and docs used
+  end
+  UI-->>User: answer

@@ -1,0 +1,24 @@
+sequenceDiagram
+  actor User
+  participant CLI as CLI or UI
+  participant API as Local API
+  participant Store as SQLite KB Store
+  participant AI as AI Package
+  participant OpenAI as OpenAI API
+
+  User->>CLI: ask question
+  opt UI request
+    CLI->>API: POST /api/kbs/:kb/ask
+  end
+  API->>Store: searchEvidence(question)
+  Store-->>API: graph nodes, edges, files, repos
+  API->>AI: answerQuestion(evidence)
+  alt OPENAI_API_KEY set
+    AI->>OpenAI: send compact graph evidence
+    OpenAI-->>AI: grounded answer
+    AI-->>API: OpenAI answer
+  else no key or API failure
+    AI-->>API: deterministic graph-backed answer
+  end
+  API-->>CLI: answer + evidence metadata
+  CLI-->>User: answer

@@ -1,0 +1,30 @@
+sequenceDiagram
+  actor User
+  participant UI as React UI
+  participant API as Local API
+  participant Store as SQLite KB Store
+  participant AI as AI Package
+
+  User->>UI: open http://localhost:5173
+  UI->>API: GET /api/kbs
+  API->>Store: listKnowledgeBases()
+  Store-->>API: KB summaries
+  API-->>UI: KB list
+  UI->>API: GET /api/kbs/:kb and /repos
+  API->>Store: load graph and repo overviews
+  Store-->>API: graph, freshness, doc metadata
+  API-->>UI: render graph, repo list, docs list
+
+  User->>UI: click repo/service/endpoint
+  UI->>API: GET doc endpoint
+  API->>Store: load cached Markdown doc
+  Store-->>API: LLM + deterministic variants
+  API-->>UI: render selected variant
+
+  User->>UI: click Regenerate
+  UI->>API: POST regenerate endpoint
+  API->>Store: build graph evidence
+  API->>AI: generate docs
+  AI-->>API: new cached doc
+  API->>Store: save doc
+  API-->>UI: render new doc

@@ -47,7 +47,7 @@ h2 {
   gap: 18px;
 }
 
-.ask, aside, .panel, .graph {
+.ask, aside, .panel, .graph, .repoDocsList, .repoDocDetail {
   background: #ffffff;
   border: 1px solid #dfe4da;
   border-radius: 8px;
@@ -60,11 +60,42 @@ h2 {
   gap: 10px;
 }
 
-input, button {
+.askMode {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.askMode > span {
+  color: #51604f;
+  font-size: 14px;
+}
+
+.kbPicker {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.kbPicker label {
+  color: #51604f;
+  font-size: 14px;
+}
+
+input, button, select {
   border-radius: 6px;
   border: 1px solid #bcc7b6;
   font: inherit;
   padding: 10px 12px;
+}
+
+select {
+  background: #fff;
+  color: #172018;
 }
 
 button {
@@ -78,14 +109,116 @@ button:disabled {
   opacity: 0.65;
 }
 
-pre {
-  white-space: pre-wrap;
+.answer {
   min-height: 220px;
   margin: 16px 0 8px;
   padding: 14px;
   background: #f3f5ef;
   border-radius: 6px;
   overflow: auto;
+  line-height: 1.5;
+}
+
+.answer.empty {
+  color: #657063;
+}
+
+.answer h1,
+.answer h2,
+.answer h3 {
+  margin: 14px 0 8px;
+  line-height: 1.2;
+}
+
+.answer h1 {
+  font-size: 22px;
+}
+
+.answer h2 {
+  font-size: 18px;
+}
+
+.answer h3 {
+  font-size: 16px;
+}
+
+.answer p,
+.answer ul,
+.answer ol,
+.answer pre,
+.answer table {
+  margin: 0 0 12px;
+}
+
+.answer ul,
+.answer ol {
+  padding-left: 22px;
+}
+
+.answer li {
+  margin: 4px 0;
+}
+
+.answer code {
+  background: #e6ebe2;
+  border: 1px solid #d7dfd2;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.92em;
+}
+
+.answer pre {
+  background: #172018;
+  color: #f6f7f2;
+  border-radius: 6px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.answer pre code {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+}
+
+.mermaidDiagram {
+  background: #fff;
+  border: 1px solid #d7dfd2;
+  border-radius: 8px;
+  margin: 10px 0 16px;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.mermaidDiagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaidError {
+  background: #fff3f1;
+  color: #65352e;
+  border: 1px solid #e2b8b0;
+  border-radius: 6px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.answer table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.answer th,
+.answer td {
+  border: 1px solid #d7dfd2;
+  padding: 8px;
+  text-align: left;
+}
+
+.answer th {
+  background: #e6ebe2;
 }
 
 .repo, .item {
@@ -94,19 +227,225 @@ pre {
   gap: 12px;
   padding: 10px 0;
   border-top: 1px solid #edf0e9;
+  min-width: 0;
+}
+
+.repo strong,
+.item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .repo span, .item span {
   color: #657063;
   font-size: 13px;
   text-align: right;
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow-wrap: anywhere;
+}
+
+.kbRow {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  color: #172018;
+  border-color: #edf0e9;
+  border-width: 1px 0 0;
+  border-radius: 0;
+  padding: 10px 0;
+  text-align: left;
+}
+
+.kbRow.active {
+  color: #245c39;
+  font-weight: 700;
+}
+
+.kbRow span {
+  color: #657063;
+  font-size: 13px;
+  text-align: right;
+}
+
+.repoTitle {
+  margin-top: 22px;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 18px;
   margin-top: 18px;
+}
+
+.docsWorkspace {
+  display: grid;
+  grid-template-columns: 390px minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.itemDocsWorkspace {
+  grid-template-columns: 430px minmax(0, 1fr);
+  align-items: start;
+}
+
+.compactDocsList .repoCard span {
+  max-height: 64px;
+  overflow: hidden;
+}
+
+.sectionTitle, .docHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.docHeader {
+  align-items: flex-start;
+}
+
+.docActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.docToggle {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(64px, 1fr));
+  border: 1px solid #bcc7b6;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.docToggle button {
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #245c39;
+  padding: 9px 10px;
+}
+
+.docToggle button + button {
+  border-left: 1px solid #bcc7b6;
+}
+
+.docToggle button.active {
+  background: #245c39;
+  color: #fff;
+}
+
+.docToggle button:disabled {
+  color: #93a08f;
+  background: #f3f5ef;
+  cursor: not-allowed;
+}
+
+.sectionTitle span,
+.docHeader span {
+  color: #657063;
+  font-size: 13px;
+}
+
+.repoCard {
+  width: 100%;
+  display: block;
+  background: #fff;
+  color: #172018;
+  border: 1px solid #dfe4da;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  text-align: left;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.repoCard.active {
+  border-color: #245c39;
+  background: #f3f8f0;
+}
+
+.repoCard strong,
+.repoCard span,
+.repoCard small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.repoCard span {
+  color: #42513f;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.repoCard small {
+  color: #657063;
+  margin-top: 8px;
+}
+
+.serviceGroup {
+  margin-bottom: 12px;
+}
+
+.docSubsection {
+  border-top: 1px solid #edf0e9;
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+.endpointChildren {
+  border-left: 2px solid #dfe4da;
+  margin: -4px 0 12px 16px;
+  padding-left: 12px;
+}
+
+.endpointLink {
+  width: 100%;
+  display: block;
+  background: #fff;
+  color: #172018;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 4px 0;
+  text-align: left;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.endpointLink.active {
+  background: #e9f1e6;
+  color: #245c39;
+}
+
+.endpointLink strong,
+.endpointLink span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.endpointLink strong {
+  font-size: 13px;
+}
+
+.endpointLink span {
+  color: #657063;
+  font-size: 12px;
+  margin-top: 3px;
 }
 
 .graph {
@@ -115,7 +454,7 @@ pre {
 
 .graphCanvas {
   position: relative;
-  height: 320px;
+  height: 520px;
   border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(36, 92, 57, 0.08) 1px, transparent 1px),
@@ -124,25 +463,178 @@ pre {
   overflow: hidden;
 }
 
-.bubble {
+.edgeLayer {
   position: absolute;
-  width: 190px;
-  min-height: 64px;
-  background: #e9f1e6;
-  border: 1px solid #b8ceb0;
-  border-radius: 8px;
-  padding: 12px;
-  box-sizing: border-box;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
 
-.bubble strong, .bubble span {
+.edgeLine {
+  stroke: #7b8d76;
+  stroke-width: 0.22;
+  vector-effect: non-scaling-stroke;
+}
+
+.edge-calls {
+  stroke: #8b5f2a;
+}
+
+.edge-consumes,
+.edge-depends_on {
+  stroke: #376b88;
+}
+
+.edge-exposes {
+  stroke: #245c39;
+}
+
+.edge-writes {
+  stroke: #7d557d;
+}
+
+.edgeLabel {
+  fill: #52614f;
+  font-size: 2.2px;
+  paint-order: stroke;
+  stroke: #f6f7f2;
+  stroke-width: 0.5;
+}
+
+.graphNode {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 180px;
+  min-height: 58px;
+  background: #ffffff;
+  border: 1px solid #b8ceb0;
+  border-radius: 8px;
+  padding: 10px;
+  box-sizing: border-box;
+  z-index: 2;
+  box-shadow: 0 8px 20px rgba(23, 32, 24, 0.08);
+}
+
+.graphNode.controller {
+  background: #e9f1e6;
+  border-color: #a8c6a0;
+}
+
+.graphNode.service {
+  background: #edf5ef;
+  border-color: #9fc3aa;
+}
+
+.graphNode.client {
+  background: #fff4e8;
+  border-color: #ddb989;
+}
+
+.graphNode.repository {
+  background: #f0eef8;
+  border-color: #c2b9df;
+}
+
+.graphNode.external {
+  background: #f7f7f7;
+  border-color: #cfcfcf;
+}
+
+.graphNode.endpoint {
+  background: #eef4fb;
+  border-color: #b7cce0;
+}
+
+.graphNode.topic {
+  background: #f4f1e7;
+  border-color: #d5c99f;
+}
+
+.graphNode.table {
+  background: #f5edf5;
+  border-color: #d4b9d4;
+}
+
+.graphNode strong, .graphNode span {
   display: block;
 }
 
-.bubble span {
+.graphNode strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.graphNode span {
   color: #52614f;
   font-size: 12px;
   margin-top: 6px;
+}
+
+.graphLegend {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dfe4da;
+  border-radius: 8px;
+  z-index: 3;
+  font-size: 12px;
+  color: #52614f;
+}
+
+.graphLegend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.graphLegend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.controllerDot {
+  background: #a8c6a0;
+}
+
+.serviceDot {
+  background: #9fc3aa;
+}
+
+.clientDot {
+  background: #ddb989;
+}
+
+.repositoryDot {
+  background: #c2b9df;
+}
+
+.endpointDot {
+  background: #b7cce0;
+}
+
+.topicDot {
+  background: #d5c99f;
+}
+
+.tableDot {
+  background: #d4b9d4;
+}
+
+.graphEmpty {
+  height: 160px;
+  display: grid;
+  place-items: center;
+  color: #657063;
+  background: #f3f5ef;
+  border-radius: 8px;
 }
 
 @media (max-width: 900px) {
@@ -156,6 +648,12 @@ pre {
     margin-top: 18px;
   }
   .grid {
+    grid-template-columns: 1fr;
+  }
+  .docsWorkspace {
+    grid-template-columns: 1fr;
+  }
+  .itemDocsWorkspace {
     grid-template-columns: 1fr;
   }
 }

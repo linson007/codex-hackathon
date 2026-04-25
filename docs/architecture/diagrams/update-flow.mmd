@@ -1,0 +1,31 @@
+sequenceDiagram
+  actor User
+  participant CLI as contextos CLI
+  participant Store as SQLite KB Store
+  participant Scanner as Scanner
+  participant Repo as Local Repo
+  participant AI as AI Package
+  participant OpenAI as OpenAI API
+
+  User->>CLI: contextos update retail-platform
+  CLI->>Store: load registered repositories
+  loop each repository
+    CLI->>Scanner: scanRepository(repo)
+    Scanner->>Repo: read Java, YAML, SQL, pom files
+    Scanner-->>CLI: nodes + edges
+    CLI->>Store: replaceGraphForRepository(repo, nodes, edges)
+  end
+  alt --generate-docs provided
+    CLI->>Store: build repo/service/endpoint evidence
+    CLI->>AI: generate docs from graph evidence
+    alt OPENAI_API_KEY set
+      AI->>OpenAI: synthesize explanatory Markdown
+      OpenAI-->>AI: LLM docs
+      AI-->>CLI: deterministic docs + LLM docs
+    else no key or API failure
+      AI-->>CLI: deterministic docs only
+    end
+    CLI->>Store: cache docs in SQLite
+  else normal update
+    CLI-->>User: graph refreshed, docs unchanged
+  end

@@ -1,0 +1,20 @@
+flowchart LR
+  CLI["apps/cli: contextos commands"]
+  API["apps/api: local Express API"]
+  UI["apps/ui: React UI"]
+  Scanner["packages/scanner: Spring + SQL scanner"]
+  Store["packages/store: SQLite KB store"]
+  AI["packages/ai: OpenAI + fallback"]
+  OpenAI["OpenAI Responses API"]
+  Repos["Local repositories: Spring-style services"]
+
+  CLI --> Scanner
+  CLI --> Store
+  CLI --> AI
+  UI --> API
+  API --> Store
+  API --> AI
+  Scanner --> Repos
+  Scanner --> Store
+  Store --> AI
+  AI --> OpenAI

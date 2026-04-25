@@ -1,0 +1,30 @@
+sequenceDiagram
+  actor User
+  participant CLI as contextos CLI
+  participant Store as SQLite KB Store
+  participant AI as AI Package
+  participant OpenAI as OpenAI API
+
+  User->>CLI: contextos docs generate retail-platform --force
+  CLI->>Store: getRepositoryEvidence(repo)
+  CLI->>AI: generateRepositoryDocumentation(evidence)
+  AI->>AI: create deterministic Markdown from graph facts
+  alt OPENAI_API_KEY set
+    AI->>OpenAI: send compact repo graph evidence
+    OpenAI-->>AI: explanatory onboarding Markdown
+    AI-->>CLI: doc with LLM variant + deterministic variant
+  else missing key or API failure
+    AI-->>CLI: doc with deterministic variant only
+  end
+  CLI->>Store: saveRepositoryDoc(doc)
+
+  loop service and endpoint targets
+    CLI->>Store: getGraphItemEvidence(nodeId)
+    CLI->>AI: generateGraphItemDocumentation(evidence)
+    AI->>AI: create deterministic item doc
+    alt OPENAI_API_KEY set
+      AI->>OpenAI: send compact service/endpoint evidence
+      OpenAI-->>AI: explanatory Markdown
+    end
+    CLI->>Store: saveGraphItemDoc(doc)
+  end

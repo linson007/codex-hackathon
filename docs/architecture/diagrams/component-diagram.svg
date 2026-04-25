@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520" role="img" aria-labelledby="title desc">
+  <title id="title">ContextOS Component Diagram</title>
+  <desc id="desc">Local repositories are scanned into SQLite by ContextOS packages. CLI and UI/API use the store and AI package, which optionally calls OpenAI.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#315f3c"/>
+    </marker>
+    <style>
+      .box { fill: #fffaf0; stroke: #d6c7a2; stroke-width: 1.5; rx: 10; }
+      .external { fill: #eef5fb; stroke: #abc4d6; stroke-width: 1.5; rx: 10; }
+      .data { fill: #f4eef8; stroke: #c6b4d4; stroke-width: 1.5; rx: 10; }
+      .label { font-family: Inter, Arial, sans-serif; font-size: 18px; font-weight: 700; fill: #172018; }
+      .sub { font-family: Inter, Arial, sans-serif; font-size: 14px; fill: #52614f; }
+      .edge { stroke: #315f3c; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .edge2 { stroke: #6f7d68; stroke-width: 1.8; fill: none; marker-end: url(#arrow); stroke-dasharray: 7 5; }
+    </style>
+  </defs>
+
+  <rect x="30" y="28" width="1060" height="464" fill="#fbfcf8" stroke="#dfe4da" rx="14"/>
+  <text x="560" y="66" text-anchor="middle" class="label" font-size="24">ContextOS MVP Architecture</text>
+
+  <rect class="box" x="70" y="125" width="190" height="82"/>
+  <text class="label" x="165" y="158" text-anchor="middle">apps/cli</text>
+  <text class="sub" x="165" y="182" text-anchor="middle">contextos commands</text>
+
+  <rect class="box" x="70" y="310" width="190" height="82"/>
+  <text class="label" x="165" y="343" text-anchor="middle">apps/ui</text>
+  <text class="sub" x="165" y="367" text-anchor="middle">React interface</text>
+
+  <rect class="box" x="320" y="310" width="190" height="82"/>
+  <text class="label" x="415" y="343" text-anchor="middle">apps/api</text>
+  <text class="sub" x="415" y="367" text-anchor="middle">local Express API</text>
+
+  <rect class="box" x="320" y="125" width="190" height="82"/>
+  <text class="label" x="415" y="158" text-anchor="middle">packages/scanner</text>
+  <text class="sub" x="415" y="182" text-anchor="middle">Spring + SQL scanner</text>
+
+  <rect class="external" x="570" y="125" width="190" height="82"/>
+  <text class="label" x="665" y="158" text-anchor="middle">Local repos</text>
+  <text class="sub" x="665" y="182" text-anchor="middle">Spring-style services</text>
+
+  <rect class="data" x="570" y="310" width="190" height="82"/>
+  <text class="label" x="665" y="343" text-anchor="middle">packages/store</text>
+  <text class="sub" x="665" y="367" text-anchor="middle">SQLite KB store</text>
+
+  <rect class="box" x="820" y="310" width="190" height="82"/>
+  <text class="label" x="915" y="343" text-anchor="middle">packages/ai</text>
+  <text class="sub" x="915" y="367" text-anchor="middle">OpenAI + fallback</text>
+
+  <rect class="external" x="820" y="125" width="190" height="82"/>
+  <text class="label" x="915" y="158" text-anchor="middle">OpenAI</text>
+  <text class="sub" x="915" y="182" text-anchor="middle">Responses API</text>
+
+  <path class="edge" d="M260 166 H320"/>
+  <path class="edge" d="M510 166 H570"/>
+  <path class="edge" d="M415 207 V310"/>
+  <path class="edge" d="M260 351 H320"/>
+  <path class="edge" d="M510 351 H570"/>
+  <path class="edge" d="M760 351 H820"/>
+  <path class="edge" d="M915 310 V207"/>
+
+  <path class="edge2" d="M165 207 V258 C165 286 205 286 240 286 H665 V310"/>
+  <path class="edge2" d="M165 125 V96 H915 V125"/>
+  <path class="edge2" d="M415 125 V96 H915 V125"/>
+
+  <text class="sub" x="290" y="154" text-anchor="middle">scan</text>
+  <text class="sub" x="540" y="154" text-anchor="middle">read files</text>
+  <text class="sub" x="446" y="262" text-anchor="middle">write graph</text>
+  <text class="sub" x="290" y="339" text-anchor="middle">HTTP</text>
+  <text class="sub" x="540" y="339" text-anchor="middle">query KB</text>
+  <text class="sub" x="790" y="339" text-anchor="middle">evidence</text>
+  <text class="sub" x="948" y="262" text-anchor="middle">optional LLM</text>
+</svg>
