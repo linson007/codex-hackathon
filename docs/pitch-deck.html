@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ContextOS Hackathon Pitch Deck</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f4ec;
+        --ink: #18231d;
+        --muted: #5d695f;
+        --panel: rgba(255, 255, 255, 0.82);
+        --panel-strong: #ffffff;
+        --border: #d9ded2;
+        --primary: #236f54;
+        --primary-soft: #dceee5;
+        --accent: #b94f3f;
+        --accent-soft: #f6ddd7;
+        --blue: #3d668f;
+        --blue-soft: #ddeaf5;
+        --shadow: 0 24px 70px rgba(39, 48, 40, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 18% 18%, rgba(35, 111, 84, 0.12), transparent 28%),
+          radial-gradient(circle at 82% 10%, rgba(185, 79, 63, 0.1), transparent 26%), linear-gradient(135deg, #f9f7f0, var(--bg));
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      .deck {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+      }
+
+      .slide {
+        width: min(1180px, 100%);
+        min-height: min(680px, calc(100vh - 56px));
+        display: none;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 28px;
+        padding: clamp(32px, 5vw, 64px);
+        background: var(--panel);
+        border: 1px solid rgba(255, 255, 255, 0.72);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+        overflow: hidden;
+        position: relative;
+      }
+
+      .slide.active {
+        display: grid;
+      }
+
+      .slide.two-col {
+        grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.98fr);
+        align-items: center;
+      }
+
+      .eyebrow {
+        color: var(--primary);
+        font-weight: 800;
+        font-size: 14px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 920px;
+        margin-top: 18px;
+        font-size: clamp(48px, 7vw, 82px);
+        line-height: 0.96;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        max-width: 920px;
+        margin-top: 10px;
+        font-size: clamp(36px, 5vw, 58px);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .lead {
+        max-width: 820px;
+        margin-top: 24px;
+        color: var(--muted);
+        font-size: clamp(22px, 2.5vw, 30px);
+        line-height: 1.28;
+      }
+
+      .sublead {
+        max-width: 760px;
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 19px;
+        line-height: 1.5;
+      }
+
+      .brandMark {
+        width: 86px;
+        height: 86px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        background: linear-gradient(135deg, var(--primary), #12382d);
+        border-radius: 20px;
+        font-size: 28px;
+        font-weight: 900;
+        box-shadow: 0 14px 34px rgba(35, 111, 84, 0.28);
+      }
+
+      .titleRow {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .pillRow,
+      .statRow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .pill {
+        padding: 10px 14px;
+        color: var(--primary);
+        background: var(--primary-soft);
+        border: 1px solid #c3dfd0;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 14px;
+      }
+
+      .cardGrid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 28px;
+      }
+
+      .card,
+      .visual,
+      .codeBox {
+        background: var(--panel-strong);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 18px;
+      }
+
+      .card p,
+      li {
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.45;
+      }
+
+      ul {
+        display: grid;
+        gap: 12px;
+        margin: 26px 0 0;
+        padding-left: 22px;
+      }
+
+      .codeBox {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        color: #eaf4ed;
+        background: #15211a;
+        border-color: #2c3b32;
+        font-size: 16px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .stat {
+        flex: 1 1 160px;
+        min-width: 150px;
+        padding: 18px;
+        background: var(--panel-strong);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+
+      .stat strong {
+        display: block;
+        color: var(--primary);
+        font-size: 36px;
+        line-height: 1;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .flow {
+        display: grid;
+        gap: 14px;
+      }
+
+      .flowStep {
+        display: grid;
+        grid-template-columns: 46px minmax(0, 1fr);
+        gap: 14px;
+        align-items: center;
+      }
+
+      .flowStep b {
+        width: 46px;
+        height: 46px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        background: var(--primary);
+        border-radius: 50%;
+      }
+
+      .flowStep div {
+        padding: 14px;
+        background: var(--panel-strong);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+
+      .miniGraph {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        align-items: center;
+      }
+
+      .node {
+        min-height: 76px;
+        display: grid;
+        place-items: center;
+        padding: 14px;
+        text-align: center;
+        background: var(--primary-soft);
+        border: 2px solid #a6d0bc;
+        border-radius: 12px;
+        font-weight: 800;
+      }
+
+      .node.red {
+        background: var(--accent-soft);
+        border-color: #e5b7ad;
+      }
+
+      .node.blue {
+        background: var(--blue-soft);
+        border-color: #bdd2e5;
+      }
+
+      .arrow {
+        height: 2px;
+        background: var(--muted);
+        position: relative;
+      }
+
+      .arrow::after {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-top: 2px solid var(--muted);
+        border-right: 2px solid var(--muted);
+        position: absolute;
+        right: 0;
+        top: -4px;
+        transform: rotate(45deg);
+      }
+
+      .screenshotFrame {
+        min-height: 420px;
+        background: #fbfcf9;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: inset 0 0 0 8px #eef2ea;
+        overflow: hidden;
+      }
+
+      .browserBar {
+        height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        background: #e7ece2;
+      }
+
+      .dot {
+        width: 11px;
+        height: 11px;
+        background: #91a08f;
+        border-radius: 50%;
+      }
+
+      .fakeUi {
+        display: grid;
+        grid-template-columns: 1fr 220px;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .fakePanel {
+        min-height: 112px;
+        padding: 16px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+
+      .fakePanel h3 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+
+      .fakeLine {
+        height: 10px;
+        margin: 10px 0;
+        background: #dbe3d8;
+        border-radius: 999px;
+      }
+
+      .fakeLine.short {
+        width: 62%;
+      }
+
+      .footer {
+        position: absolute;
+        left: clamp(32px, 5vw, 64px);
+        right: clamp(32px, 5vw, 64px);
+        bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .controls {
+        position: fixed;
+        right: 24px;
+        bottom: 20px;
+        display: flex;
+        gap: 8px;
+        z-index: 20;
+      }
+
+      .controls button {
+        min-width: 44px;
+        min-height: 38px;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      .progress {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        height: 5px;
+        width: 100%;
+        background: rgba(35, 111, 84, 0.16);
+        z-index: 18;
+      }
+
+      .progress span {
+        display: block;
+        width: var(--progress);
+        height: 100%;
+        background: var(--primary);
+      }
+
+      @media (max-width: 900px) {
+        .deck {
+          padding: 12px;
+        }
+
+        .slide,
+        .slide.two-col {
+          min-height: calc(100vh - 24px);
+          grid-template-columns: 1fr;
+          padding: 28px;
+        }
+
+        .cardGrid,
+        .fakeUi {
+          grid-template-columns: 1fr;
+        }
+
+        .miniGraph {
+          grid-template-columns: 1fr;
+        }
+
+        .arrow {
+          width: 2px;
+          height: 28px;
+          margin: 0 auto;
+        }
+
+        .arrow::after {
+          right: -4px;
+          top: auto;
+          bottom: 0;
+          transform: rotate(135deg);
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .deck {
+          display: block;
+          padding: 0;
+        }
+
+        .slide,
+        .slide.active,
+        .slide.two-col {
+          display: grid;
+          min-height: 100vh;
+          break-after: page;
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
+        }
+
+        .controls,
+        .progress {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="deck">
+      <section class="slide active two-col" data-title="Title">
+        <div>
+          <div class="titleRow">
+            <div class="brandMark">CO</div>
+            <div class="eyebrow">Hackathon MVP</div>
+          </div>
+          <h1>ContextOS</h1>
+          <p class="lead">Local codebase knowledge for developers and AI agents.</p>
+          <div class="pillRow">
+            <span class="pill">Spring Boot-style repos</span>
+            <span class="pill">SQLite graph</span>
+            <span class="pill">OpenAI optional</span>
+            <span class="pill">Codex / Claude skill</span>
+          </div>
+        </div>
+        <div class="visual">
+          <div class="miniGraph">
+            <div class="node">Human Web UI</div>
+            <div class="arrow"></div>
+            <div class="node blue">ContextOS KB</div>
+            <div class="node red">Codex / Claude</div>
+            <div class="arrow"></div>
+            <div class="node">Local Repos</div>
+          </div>
+        </div>
+        <div class="footer"><span>ContextOS</span><span>1 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Problem">
+        <div>
+          <div class="eyebrow">Problem</div>
+          <h2>Enterprise codebases are hard to understand quickly.</h2>
+          <p class="lead">New joiners and AI agents both struggle with scattered repository knowledge.</p>
+        </div>
+        <div class="cardGrid">
+          <div class="card">
+            <strong>Slow onboarding</strong>
+            <p>APIs, business flows, tables, topics, and owners are spread across repos.</p>
+          </div>
+          <div class="card">
+            <strong>Risky changes</strong>
+            <p>A small logic change can affect services, endpoints, events, and data paths.</p>
+          </div>
+          <div class="card">
+            <strong>AI context limit</strong>
+            <p>Agents cannot keep an entire multi-repo product in the prompt window.</p>
+          </div>
+          <div class="card">
+            <strong>Stale docs</strong>
+            <p>Architecture notes drift unless they are regenerated from source facts.</p>
+          </div>
+        </div>
+        <div class="footer"><span>Why it matters</span><span>2 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Solution">
+        <div>
+          <div class="eyebrow">Solution</div>
+          <h2>A local knowledge graph built from source code.</h2>
+          <p class="lead">
+            ContextOS scans repositories, stores graph facts, generates onboarding docs, and answers questions with grounded evidence.
+          </p>
+        </div>
+        <div class="flow">
+          <div class="flowStep">
+            <b>1</b>
+            <div>Register local repositories in a knowledge base.</div>
+          </div>
+          <div class="flowStep">
+            <b>2</b>
+            <div>Scan controllers, services, clients, tables, topics, and files.</div>
+          </div>
+          <div class="flowStep">
+            <b>3</b>
+            <div>Generate docs and answer questions from graph evidence.</div>
+          </div>
+          <div class="flowStep">
+            <b>4</b>
+            <div>Expose the same context to humans in UI and agents through SKILL.md.</div>
+          </div>
+        </div>
+        <div class="footer"><span>Core idea</span><span>3 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Demo">
+        <div>
+          <div class="eyebrow">Demo Scenario</div>
+          <h2>Refund eligibility impact analysis.</h2>
+          <p class="lead">One question should find impacted services, APIs, tables, Kafka topics, and source files.</p>
+        </div>
+        <div class="codeBox">
+          ./bin/contextos.js ask retail-platform \ "What is impacted if I change refund eligibility logic?" \ --with-docs Expected: -
+          order-service owns eligibility - billing-service handles refund payment - notification-service consumes refund-events - tables,
+          endpoints, risks, and files listed
+        </div>
+        <div class="footer"><span>Live demo anchor</span><span>4 / 10</span></div>
+      </section>
+
+      <section class="slide" data-title="What We Built">
+        <div>
+          <div class="eyebrow">What We Built</div>
+          <h2>Hackathon-complete vertical slice.</h2>
+          <div class="statRow">
+            <div class="stat"><strong>CLI</strong><span>init, repos, update, ask, docs, ui, export, Jira plan</span></div>
+            <div class="stat"><strong>Graph</strong><span>SQLite nodes and edges under the user directory</span></div>
+            <div class="stat"><strong>Scanner</strong><span>Spring controllers, services, clients, Kafka, SQL tables</span></div>
+            <div class="stat"><strong>UI</strong><span>Ask, docs, dependency graph, dark mode, markdown</span></div>
+            <div class="stat"><strong>AI</strong><span>OpenAI synthesis with deterministic fallback</span></div>
+            <div class="stat"><strong>Skill</strong><span>Codex/Claude workflow for local context retrieval</span></div>
+          </div>
+        </div>
+        <div class="footer"><span>MVP scope</span><span>5 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Architecture">
+        <div>
+          <div class="eyebrow">Architecture</div>
+          <h2>Facts first, synthesis second.</h2>
+          <p class="lead">OpenAI improves wording and reasoning, but the source of truth is the deterministic graph.</p>
+        </div>
+        <div class="visual">
+          <div class="flow">
+            <div class="flowStep">
+              <b>A</b>
+              <div>Local repos scanned into SQLite KB.</div>
+            </div>
+            <div class="flowStep">
+              <b>B</b>
+              <div>Graph retrieval selects relevant nodes, edges, files, and docs.</div>
+            </div>
+            <div class="flowStep">
+              <b>C</b>
+              <div>OpenAI receives compact evidence only, not whole repositories.</div>
+            </div>
+            <div class="flowStep">
+              <b>D</b>
+              <div>Fallback answers work even without an API key.</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>Architecture</span><span>6 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Human Workflow">
+        <div>
+          <div class="eyebrow">Human Workflow</div>
+          <h2>New joiners use the web view.</h2>
+          <p class="lead">
+            They can read repo docs, inspect services and endpoints, view sequence diagrams, and explore dependencies without asking a
+            senior engineer first.
+          </p>
+        </div>
+        <div class="screenshotFrame">
+          <div class="browserBar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="fakeUi">
+            <div class="fakePanel">
+              <h3>Ask ContextOS</h3>
+              <div class="fakeLine"></div>
+              <div class="fakeLine short"></div>
+            </div>
+            <div class="fakePanel">
+              <h3>Knowledge Bases</h3>
+              <div class="fakeLine"></div>
+              <div class="fakeLine"></div>
+            </div>
+            <div class="fakePanel">
+              <h3>Repository Documentation</h3>
+              <div class="fakeLine"></div>
+              <div class="fakeLine"></div>
+              <div class="fakeLine short"></div>
+            </div>
+            <div class="fakePanel">
+              <h3>Dependency Graph</h3>
+              <div class="miniGraph">
+                <div class="node">Controller</div>
+                <div class="arrow"></div>
+                <div class="node blue">Service</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="footer"><span>Human value</span><span>7 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Agent Workflow">
+        <div>
+          <div class="eyebrow">AI Agent Workflow</div>
+          <h2>Codex or Claude gets local project memory.</h2>
+          <p class="lead">The skill teaches the agent how to query ContextOS before making code changes or answering impact questions.</p>
+        </div>
+        <div class="codeBox">
+          # Agent uses the skill contextos kbs contextos update retail-platform contextos ask retail-platform \ "What files should I inspect
+          for refund eligibility?" \ --with-docs # Result becomes grounded task context.
+        </div>
+        <div class="footer"><span>Agent value</span><span>8 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Differentiators">
+        <div>
+          <div class="eyebrow">Differentiators</div>
+          <h2>Local, grounded, and useful without platform setup.</h2>
+        </div>
+        <div>
+          <ul>
+            <li>Local-first: code and KBs stay on the developer machine.</li>
+            <li>Graph facts are deterministic and repeatable.</li>
+            <li>LLM calls are optional and grounded by evidence.</li>
+            <li>Same KB serves human onboarding and AI agent context.</li>
+            <li>Works with local repositories before enterprise integrations.</li>
+            <li>JSON/Jira/Backstage exports are optional tool paths, not the core dependency.</li>
+          </ul>
+        </div>
+        <div class="footer"><span>Why this is different</span><span>9 / 10</span></div>
+      </section>
+
+      <section class="slide two-col" data-title="Close">
+        <div>
+          <div class="eyebrow">Close</div>
+          <h2>From source code to shared understanding.</h2>
+          <p class="lead">
+            ContextOS gives teams a local memory layer that helps humans onboard and helps agents act with the right context.
+          </p>
+        </div>
+        <div>
+          <div class="cardGrid">
+            <div class="card">
+              <strong>Pilot</strong>
+              <p>Run against one real product area with 3 to 5 repositories.</p>
+            </div>
+            <div class="card">
+              <strong>Next</strong>
+              <p>Richer Java parsing, embeddings, PR impact summaries, Jira planning, and architecture drift checks.</p>
+            </div>
+          </div>
+          <div class="codeBox" style="margin-top: 18px">Demo command: ./bin/contextos.js ui</div>
+        </div>
+        <div class="footer"><span>Ask</span><span>10 / 10</span></div>
+      </section>
+    </main>
+
+    <div class="controls" aria-label="Slide controls">
+      <button type="button" id="prev" aria-label="Previous slide">Prev</button>
+      <button type="button" id="next" aria-label="Next slide">Next</button>
+    </div>
+    <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+
+    <script>
+      const slides = Array.from(document.querySelectorAll(".slide"));
+      const progress = document.getElementById("progress");
+      let current = Number(new URLSearchParams(window.location.search).get("slide") || "1") - 1;
+
+      function show(index) {
+        current = Math.max(0, Math.min(slides.length - 1, index));
+        slides.forEach((slide, slideIndex) => slide.classList.toggle("active", slideIndex === current));
+        progress.style.setProperty("--progress", `${((current + 1) / slides.length) * 100}%`);
+        const url = new URL(window.location.href);
+        url.searchParams.set("slide", String(current + 1));
+        window.history.replaceState(null, "", url);
+      }
+
+      document.getElementById("prev").addEventListener("click", () => show(current - 1));
+      document.getElementById("next").addEventListener("click", () => show(current + 1));
+      window.addEventListener("keydown", (event) => {
+        if (["ArrowRight", "PageDown", " "].includes(event.key)) show(current + 1);
+        if (["ArrowLeft", "PageUp"].includes(event.key)) show(current - 1);
+        if (event.key === "Home") show(0);
+        if (event.key === "End") show(slides.length - 1);
+      });
+      show(current);
+    </script>
+  </body>
+</html>

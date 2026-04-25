@@ -1,5 +1,15 @@
 # ContextOS Demo Script
 
+## Pitch Deck
+
+Open the interview deck in a browser:
+
+```bash
+open docs/pitch-deck.html
+```
+
+The editable outline is in [PITCH_DECK.md](PITCH_DECK.md).
+
 ## Terminal Setup
 
 ```bash
