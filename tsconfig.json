@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/store" },
+    { "path": "./packages/scanner" },
+    { "path": "./packages/ai" },
+    { "path": "./apps/api" },
+    { "path": "./apps/cli" },
+    { "path": "./apps/ui" }
+  ]
+}

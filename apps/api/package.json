@@ -1,0 +1,12 @@
+{
+  "name": "@contextos/api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@contextos/ai": "0.1.0",
+    "@contextos/store": "0.1.0"
+  }
+}

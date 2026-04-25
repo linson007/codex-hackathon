@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.contextos/
+.vite/
+coverage/
+*.log
+*.tsbuildinfo
+*.d.ts.map
